@@ -1,7 +1,7 @@
 <div align="center">
 
 # 🪕 Bardo AI
-### Regia Musicale Automatica & Soundboard Vocale in Italiano per Giochi di Ruolo (D&D, Pathfinder, Call of Cthulhu, Cyberpunk)
+### Regia Musicale Automatica & Soundboard Vocale in Italiano per Giochi di Ruolo
 
 [![Release](https://img.shields.io/github/v/release/Il-Basta-Paolo/BardoAI?style=for-the-badge&label=Scarica%20Installer&color=10b981)](https://github.com/Il-Basta-Paolo/BardoAI/releases/latest)
 [![Platform](https://img.shields.io/badge/Windows-10%20%7C%2011%20(64--bit)-0284c7?style=for-the-badge&logo=windows)](https://github.com/Il-Basta-Paolo/BardoAI/releases/latest)
@@ -11,7 +11,7 @@
 
 <br/>
 
-**Bardo AI** ascolta la voce del Dungeon Master (o dei giocatori) in **Italiano** durante la sessione e gestisce in totale autonomia sia la **colonna sonora 100% strumentale** (con dissolvenze incrociate *S-Curve* da cinema) sia gli **effetti sonori (SFX)** in tempo reale.
+**Bardo AI** è un progetto che ho realizzato da solo in vibecoding, ascolta la voce del Dungeon Master (o dei giocatori) in **Italiano** durante la sessione e gestisce in totale autonomia sia la **colonna sonora 100% strumentale** (con dissolvenze incrociate *S-Curve* da cinema) sia gli **effetti sonori (SFX)** in tempo reale. Mi è capitato più volte di non avere tempo di selezionare le giuste colonne sonore e di dover improvvisare, così come mi è capitato di pensare che sarebbe stato immersivo avere suoni che reagiscono a ciò che succede in game quindi ho iniziato a creare Bardo AI cercando di risolvere tutti questi problemi, provatelo e aiutatemi a migliorarlo!
 
 ### 👉 [**📥 SCARICA `BardoAI_Setup.exe` (Installer Completo per Windows)**](https://github.com/Il-Basta-Paolo/BardoAI/releases/latest)
 *(Non richiede né Python né VLC Media Player: tutto il motore audio è già integrato nell'installer!)*
