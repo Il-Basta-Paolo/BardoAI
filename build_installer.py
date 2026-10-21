@@ -5,8 +5,8 @@ Script di generazione completa dell'Installer distribuibile `BardoAI_Setup.exe`:
 3. Crea l'archivio compresso `installer_payload.zip` includendo:
    - `BardoAI.exe` + `bardo_icon.ico`
    - `sfx/*.wav` (20 effetti sonori stereo rimasterizzati)
-   - `vlc/` (`libvlc.dll`, `libvlccore.dll` e plugin audio/rete di VLC, così gli amici non devono installare VLC!)
-   - `LEGGIMI_AMICI.txt`
+   - `vlc/` (`libvlc.dll`, `libvlccore.dll` e plugin audio/rete di VLC)
+   - `LEGGIMI.txt`
 4. Compila il Setup Wizard grafico (`installer_gui.py`) nel singolo file `BardoAI_Setup.exe`.
 """
 
@@ -186,7 +186,7 @@ COME INIZIARE:
     with zipfile.ZipFile(PAYLOAD_ZIP, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
         zf.write(BASE_DIR / "BardoAI.exe", "BardoAI.exe")
         zf.write(ICON_PATH, "bardo_icon.ico")
-        zf.writestr("LEGGIMI_AMICI.txt", readme_text)
+        zf.writestr("LEGGIMI.txt", readme_text)
 
         for wav in sorted((BASE_DIR / "sfx").glob("*.wav")):
             zf.write(wav, f"sfx/{wav.name}")
@@ -243,11 +243,12 @@ def build_setup_exe() -> None:
     shutil.copy2(dist_setup, target_setup)
     PAYLOAD_ZIP.unlink(missing_ok=True)
     setup_mb = target_setup.stat().st_size / (1024 * 1024)
-    print(f"\n[COMPLETATO] Installer pronto da inviare agli amici: {target_setup} ({setup_mb:.1f} MB)")
+    print(f"\n[COMPLETATO] Installer pronto: {target_setup} ({setup_mb:.1f} MB)")
 
 
 if __name__ == "__main__":
     generate_bardo_icon()
-    update_main_spec_and_build()
+    if "--quick-setup" not in sys.argv or not (BASE_DIR / "BardoAI.exe").exists():
+        update_main_spec_and_build()
     build_payload_zip()
     build_setup_exe()
