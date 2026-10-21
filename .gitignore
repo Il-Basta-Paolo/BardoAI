@@ -1,0 +1,20 @@
+# Virtual environment & Python cache
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller build artifacts & local executables (published via GitHub Releases)
+build/
+dist/
+*.exe
+installer_payload.zip
+
+# Dati utente, token di sessione Spotify / YouTube Music e chiavi API (PRIVATI!)
+data/
+*.json
+!package.json
+
+# Cache temporanea generazione SFX
+sfx/_raw_cache/
