@@ -22,6 +22,22 @@ ICON_PATH = BASE_DIR / "bardo_icon.ico"
 PAYLOAD_ZIP = BASE_DIR / "installer_payload.zip"
 
 
+def get_pyinstaller_cmd() -> str:
+    """Risolve in modo affidabile il percorso dell'eseguibile PyInstaller (venv, script o PATH)."""
+    candidates = [
+        BASE_DIR / ".venv" / "Scripts" / "pyinstaller.exe",
+        Path(sys.executable).parent / "Scripts" / "pyinstaller.exe",
+        Path(sys.executable).parent / "pyinstaller.exe",
+    ]
+    for c in candidates:
+        if c.is_file():
+            return str(c)
+    which_cmd = shutil.which("pyinstaller")
+    if which_cmd:
+        return which_cmd
+    return "pyinstaller"
+
+
 def ensure_bardo_icon() -> None:
     """Genera l'icona `.ico` solo se non già presente nel repository (risolve bug #29 di bastaaaa.md)."""
     if ICON_PATH.is_file():
@@ -50,12 +66,9 @@ def ensure_bardo_icon() -> None:
 
 def build_bardo_exe() -> None:
     """Compila BardoAI.exe usando BardoAI.spec senza sovrascriverlo."""
-    pyinstaller_exe = BASE_DIR / ".venv" / "Scripts" / "pyinstaller.exe"
-    if not pyinstaller_exe.is_file():
-        pyinstaller_exe = Path(sys.executable).parent / "pyinstaller.exe"
-
+    pyinstaller_cmd = get_pyinstaller_cmd()
     print("[2/5] Compilazione di BardoAI.exe (PySide6 + PyAV)...")
-    subprocess.run([str(pyinstaller_exe), "--noconfirm", "BardoAI.spec"], cwd=str(BASE_DIR), check=True)
+    subprocess.run([pyinstaller_cmd, "--noconfirm", "BardoAI.spec"], cwd=str(BASE_DIR), check=True)
     dist_exe = BASE_DIR / "dist" / "BardoAI.exe"
     if dist_exe.is_file():
         shutil.copy2(dist_exe, BASE_DIR / "BardoAI.exe")
@@ -99,12 +112,9 @@ COME INIZIARE:
 
 def build_setup_exe() -> None:
     """Compila BardoAI_Setup.exe usando BardoAI_Setup.spec."""
-    pyinstaller_exe = BASE_DIR / ".venv" / "Scripts" / "pyinstaller.exe"
-    if not pyinstaller_exe.is_file():
-        pyinstaller_exe = Path(sys.executable).parent / "pyinstaller.exe"
-
+    pyinstaller_cmd = get_pyinstaller_cmd()
     print("[4/5] Compilazione di BardoAI_Setup.exe...")
-    subprocess.run([str(pyinstaller_exe), "--noconfirm", "BardoAI_Setup.spec"], cwd=str(BASE_DIR), check=True)
+    subprocess.run([pyinstaller_cmd, "--noconfirm", "BardoAI_Setup.spec"], cwd=str(BASE_DIR), check=True)
     dist_exe = BASE_DIR / "dist" / "BardoAI_Setup.exe"
     if dist_exe.is_file():
         shutil.copy2(dist_exe, BASE_DIR / "BardoAI_Setup.exe")
