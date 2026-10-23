@@ -3,14 +3,24 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [('sfx', 'sfx'), ('bardo_icon.ico', '.')]
 binaries = []
-hiddenimports = []
-tmp_ret = collect_all('customtkinter')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('ytmusicapi')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('_sounddevice_data')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+hiddenimports = [
+    'PySide6', 'PySide6.QtCore', 'PySide6.QtGui', 'PySide6.QtWidgets',
+    'av', 'sounddevice', 'numpy', 'keyring', 'pydantic',
+    'vosk', 'faster_whisper', 'onnxruntime', 'httpx',
+    'ui', 'ui.main_window', 'ui.styles',
+    'ui.widgets.mood_grid', 'ui.widgets.soundboard',
+    'ui.widgets.transport', 'ui.widgets.voice_monitor',
+    'ui.dialogs.settings_dialog',
+]
 
+for mod in ['ytmusicapi', '_sounddevice_data', 'keyring', 'vosk', 'ctranslate2']:
+    try:
+        tmp = collect_all(mod)
+        datas += tmp[0]
+        binaries += tmp[1]
+        hiddenimports += tmp[2]
+    except Exception:
+        pass
 
 a = Analysis(
     ['desktop_app.py'],
@@ -21,7 +31,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['tkinter', 'customtkinter', 'vlc', 'fastapi', 'uvicorn'],
     noarchive=False,
     optimize=0,
 )
@@ -37,7 +47,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
@@ -47,4 +57,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon='bardo_icon.ico',
+    version='version_bardo.txt',
 )

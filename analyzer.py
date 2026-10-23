@@ -1,35 +1,195 @@
 """
-Motore di analisi vocale e semantica contestuale in Italiano per Bardo AI:
-1. Comandi vocali diretti ("Bardo metti combattimento", "Bardo pausa", "Prossima traccia")
-2. Classificatore Semantico di Pericolo, Tono e Ritmo con VETO RIGIDO anti-errore:
-   - Impedisce matematicamente che frasi di pericolo, fuoco, ferite, morte, agonia o attacco possano MAI
-     attivare musiche rilassanti/riposo/taverna/esplorazione (es. "state bruciando vivi" -> Combattimento/Boss!).
-3. Analisi morfologica italiana (frasi, parole chiave e radici verbali sicure).
-4. Analisi narrativa tramite AI opzionale (Google Gemini, Ollama locale o OpenAI).
+Motore di analisi semantica, morfologica e contestuale in Italiano per Bardo AI v2.6.0.
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
 
 import json
 import re
+
+__author__ = "Paolo Basta"
 import unicodedata
 from collections import deque
-from typing import Dict, Any, List, Optional, Deque, Tuple
+from typing import Dict, Any, List, Optional, Deque, Tuple, Set
 
 import httpx
 
 
+# Pattern omografi da disambiguare PRIMA della rimozione degli accenti
+# (es. "farò" verbo futuro vs "faro" sostantivo marittimo; "dà" verbo dare)
+_ACCENTED_FUTURE_FARE_RE = re.compile(r"\bfar[òo]\b", re.IGNORECASE)
+
+
 def normalize_italian(text: str) -> str:
     """
-    Normalizza il testo italiano rimuovendo accenti, punteggiatura superflua e convertendo in minuscolo.
+    Normalizza il testo italiano convertendo in minuscolo, preservando i confini di parola
+    e neutralizzando gli omografi accentati (es. 'farò' -> 'faro_verbo').
     """
-    text = text.lower().strip()
-    text = re.sub(r"['’`]", " ", text)
-    nfkd = unicodedata.normalize("NFKD", text)
+    raw = text.lower().strip()
+    # Se c'è esplicitamente l'accento grave su "farò", marcalo come verbo futuro
+    raw = re.sub(r"\bfar[ò]\b", "faroverbo", raw)
+    raw = re.sub(r"['’`]", " ", raw)
+    nfkd = unicodedata.normalize("NFKD", raw)
     no_accents = "".join(c for c in nfkd if not unicodedata.combining(c))
     cleaned = re.sub(r"[^a-z0-9\s-]", " ", no_accents)
-    return re.sub(r"\s+", " ", cleaned).strip()
+    norm = re.sub(r"\s+", " ", cleaned).strip()
+    # Anche senza accento (es. output STT "lo faro", "ce la faro", "non lo faro", "cosa faro", "ti faro", "vi faro"):
+    norm = re.sub(
+        r"\b(lo|la|li|le|ne|cosa|come|quando|non|ti|vi|ci|mi|gli|si)\s+faro\b",
+        r"\1 faroverbo",
+        norm,
+    )
+    norm = re.sub(r"\bfaro\s+(del\s+mio|un|una|qualcosa|questo|quello|come|subito|dopo|domani)\b", r"faroverbo \1", norm)
+    return norm
 
 
-# Frasi e radici di PERICOLO ESTREMO / AGONIA / BOSS / CATASTROFE
+# =============================================================================
+# PARSER DI NEGAZIONE ITALIANO PER CLAUSOLA SINTATTICA
+# =============================================================================
+
+# Congiunzioni avversative o cambi di clausola dove termina l'effetto di una negazione precedente
+CLAUSE_BREAK_PATTERN = re.compile(
+    r"(?:[,;.:!?]+|\b(?:ma|pero|tuttavia|eppure|anzi|invece|all\s+improvviso|improvvisamente|quando\s+ad\s+un\s+tratto|ad\s+un\s+tratto)\b)",
+    re.IGNORECASE,
+)
+
+# Espressioni di negazione in italiano che annullano i trigger di pericolo/scena/SFX che le seguono nella stessa clausola
+NEGATION_TOKENS = {
+    "non", "nessun", "nessuno", "nessuna", "senza", "mai", "mica",
+    "neanche", "nemmeno", "neppure", "niente", "nulla", "zero",
+}
+
+NEGATION_PHRASES = (
+    "non c e",
+    "non ci sono",
+    "non vedete",
+    "non sentite",
+    "non trovate",
+    "non subisci",
+    "non subite",
+    "non parte",
+    "non scatta",
+    "senza alcun",
+    "senza nessun",
+    "nessuna traccia di",
+)
+
+# Espressioni in cui "danno" è la 3ª persona plurale del verbo "dare" e NON un danno da combattimento
+SAFE_DARE_PATTERNS = (
+    "vi danno", "mi danno", "ti danno", "ci danno", "gli danno", "le danno", "si danno",
+    "danno il benvenuto", "danno ospitalita", "danno da bere", "danno da mangiare",
+    "danno una mano", "danno alloggio", "danno indicazioni", "danno informazioni",
+    "danno ragione", "danno ascolto", "danno inizio alla festa", "danno spettacolo",
+    "danno su", "danno sulla", "danno sul", "finestre che danno",
+)
+
+# Espressioni in cui "fuoco" indica un fuoco tranquillo (camino, bivacco, accampamento, cucina) e NON un combattimento
+SAFE_COZY_FIRE_PATTERNS = (
+    "intorno al fuoco",
+    "accanto al fuoco",
+    "vicino al fuoco",
+    "davanti al fuoco",
+    "attorno al fuoco",
+    "fuoco da campo",
+    "fuoco del camino",
+    "fuoco acceso",
+    "bel fuoco",
+    "calore del fuoco",
+    "scaldarsi al fuoco",
+    "scaldatevi al fuoco",
+    "vi scaldate al fuoco",
+    "seduti al fuoco",
+    "accendete il fuoco",
+    "accendere il fuoco",
+    "accendiamo il fuoco",
+    "accendete il falo",
+    "intorno al falo",
+    "fuoco per cucinare",
+    "pentola sul fuoco",
+    "carne sul fuoco",
+)
+
+
+def split_affirmed_and_negated_text(raw_text: str) -> Tuple[str, str]:
+    """
+    Divide il testo in clausole sintattiche (separate da punteggiatura o congiunzioni avversative come 'ma', 'però', 'all'improvviso')
+    e separa le porzioni AFFERMATE da quelle NEGATE.
+    Restituisce: (affirmed_norm_text, negated_norm_text)
+    Esempio:
+      - "Non ci sono nemici nella stanza" -> affirmed="", negated="non ci sono nemici nella stanza"
+      - "Non ci sono nemici, ma un orco vi attacca!" -> affirmed="un orco vi attacca", negated="non ci sono nemici"
+      - "Avanzate senza fare rumore e senza sfoderare la spada" -> affirmed="avanzate", negated="senza fare rumore e senza sfoderare la spada"
+    """
+    clauses = CLAUSE_BREAK_PATTERN.split(raw_text)
+    affirmed_parts: List[str] = []
+    negated_parts: List[str] = []
+
+    for clause in clauses:
+        norm_c = normalize_italian(clause)
+        if not norm_c:
+            continue
+
+        tokens = norm_c.split()
+        neg_start_idx: Optional[int] = None
+
+        for i, tok in enumerate(tokens):
+            if tok in NEGATION_TOKENS:
+                # Eccezione: "non morti" / "non-morti" / "non morto" è un sostantivo (undead), non una negazione!
+                if tok == "non" and i + 1 < len(tokens) and tokens[i + 1].startswith("mort"):
+                    continue
+                neg_start_idx = i
+                break
+
+        if neg_start_idx is None:
+            for np_pat in NEGATION_PHRASES:
+                if np_pat in norm_c:
+                    neg_start_idx = 0
+                    break
+
+        if neg_start_idx is None:
+            affirmed_parts.append(norm_c)
+        else:
+            if neg_start_idx > 0:
+                affirmed_parts.append(" ".join(tokens[:neg_start_idx]))
+            negated_parts.append(" ".join(tokens[neg_start_idx:]))
+
+    return " ".join(affirmed_parts).strip(), " ".join(negated_parts).strip()
+
+
+def clean_false_positive_collocations(norm_text: str) -> str:
+    """
+    Neutralizza nel testo affermato i costrutti idiomatici che contengono omografi
+    di parole di pericolo o biomi (es. 'vi danno il benvenuto', 'costa dieci monete', 'è reale').
+    """
+    out = norm_text
+    for pat in SAFE_DARE_PATTERNS:
+        if pat in out:
+            out = out.replace(pat, pat.replace("danno", "offrono"))
+    for pat in SAFE_COZY_FIRE_PATTERNS:
+        if pat in out:
+            out = out.replace(pat, pat.replace("fuoco", "bivacco"))
+    # "costa <numero>" o "quanto costa" -> verbo costare (prezzo), non costa marittima
+    out = re.sub(
+        r"\bcosta\s+(?:solo\s+|circa\s+|almeno\s+)?(?:\d+|un|una|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|venti|trenta|quaranta|cinquanta|cento|mille|poco|troppo|molto| caro|cara|monete|oro)\b",
+        "prezzo monete",
+        out,
+    )
+    out = re.sub(r"\b(?:quanto|cosa|che)\s+costa\b", "prezzo", out)
+    # "è reale", "non è reale", "mondo reale", "in tempo reale", "vita reale" -> aggettivo "vero", non "del Re"
+    out = re.sub(r"\b(?:e|sembra|mondo|tempo|vita|visione|tutto|molto)\s+reale\b", "vero", out)
+    return out
+
+
+def preprocess_text_for_analysis(text: str) -> str:
+    """Normalizza e pulisce le collocazioni di falsi positivi nel testo."""
+    norm = normalize_italian(text)
+    return clean_false_positive_collocations(norm)
+
+
+
+# =============================================================================
+# DIZIONARIO DI PERICOLO, BOSS E BIOMI
+# =============================================================================
+
 CATASTROPHIC_PHRASES = [
     "state bruciando vivi",
     "bruciando vivi",
@@ -58,9 +218,38 @@ CATASTROPHIC_PHRASES = [
     "urla di dolore",
 ]
 
-# Radici morfologiche italiane di PERICOLO / VIOLENZA / DANNO / COMBATTIMENTO
-# Se una qualsiasi di queste radici è presente nella frase, TUTTE le atmosfere calme/riposo/taverna
-# ricevono un VETO ASSOLUTO (-999 punti) e il motore indirizza verso Combattimento / Boss / Azione!
+COMBAT_DAMAGE_PHRASES = (
+    "subisci danno",
+    "subite danno",
+    "subisce danno",
+    "punti danno",
+    "punto danno",
+    "fai danno",
+    "fa danno",
+    "fanno danno",
+    "tiro del danno",
+    "tira il danno",
+    "tirate i danni",
+    "quanti danni",
+    "subisci danni",
+    "subite danni",
+    "danno da fuoco",
+    "danno da acido",
+    "danno da veleno",
+    "danno da taglio",
+    "danno contundente",
+    "danno perforante",
+    "danno necrotico",
+    "danno radioso",
+    "danno psichico",
+    "prendete fuoco",
+    "prende fuoco",
+    "aprono il fuoco",
+    "aprite il fuoco",
+    "a fuoco",
+    "in fiamme",
+)
+
 DANGER_WORD_STEMS = (
     "bruci",      # brucia, bruciando, bruciate, bruciare, bruciati
     "fiamm",      # fiamma, fiamme, fiammata
@@ -79,7 +268,7 @@ DANGER_WORD_STEMS = (
     "squarci",    # squarcia, squarciato, squarcio
     "lacer",      # lacera, lacerato
     "decapit",    # decapita, decapitato
-    "massacr",    # massacro, massacrati
+    "massacr",     # massacro, massacrati
     "stermin",    # sterminio, sterminati
     "assal",      # assale, assalgono, assalto, assaliti
     "imboscat",   # imboscata
@@ -104,19 +293,21 @@ DANGER_WORD_STEMS = (
     "proiettil",  # proiettile, proiettili
 )
 
+# NOTA: "danno" e "fuoco" NON sono in DANGER_EXACT_WORDS isolati (vengono gestiti tramite COMBAT_DAMAGE_PHRASES
+# e controllo di contesto, mentre "danni" plurale è sempre inequivocabile).
 DANGER_EXACT_WORDS = {
-    "rogo", "acido", "veleno", "sangue", "danni", "danno",
-    "spada", "spadata", "spade", "ascia", "scudo", "freccia", "frecce",
-    "balestra", "iniziativa", "nemico", "nemici", "mostro", "mostri",
+    "rogo", "acido", "veleno", "danni",
+    "spada", "spadata", "spade", "ascia", "freccia", "frecce",
+    "balestra", "iniziativa", "nemico", "nemici",
     "orco", "orchi", "goblin", "troll", "drago", "demone", "lich",
-    "morte", "morto", "morti", "pericolo", "trappola", "imboscata",
-    "carica", "caricano", "morde", "zanne", "urlo", "urla", "panico", "terrore",
-    "fuoco", "bomba", "granata", "sparo", "spara",
+    "imboscata", "caricano", "morde", "zanne", "panico", "terrore",
+    "bomba", "granata", "sparo", "spara", "sparatoria",
 }
 
 CALM_MOOD_IDS = {
     "accampamento", "taverna", "citta", "esplorazione", "vittoria",
-    "indagine", "metropoli", "club", "spazio",
+    "indagine", "rifugio", "metropoli", "club", "spazio",
+    "scena_crimine", "deduzione", "rivelazione",
 }
 
 CALM_TONE_PROFILES = {
@@ -124,10 +315,7 @@ CALM_TONE_PROFILES = {
 }
 
 # =============================================================================
-# SISTEMA DINAMICO DI RICONOSCIMENTO AMBIENTI E BIOMI (100% STRUMENTALE)
-# Permette a Bardo AI di reagire istantaneamente a descrizioni ambientali come:
-# "siete in una valle innevata", "siete in un deserto", "siete in una palude",
-# "siete in alto mare", "entrate in un tempio", "siete in un cimitero", ecc.
+# 15 BIOMI E AMBIENTI PRIVI DI PAROLE SINGOLE AMBIGUE
 # =============================================================================
 ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
     {
@@ -141,6 +329,7 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
             "distesa di neve", "distesa di ghiaccio", "bufera di neve", "tormenta di neve",
             "freddo gelido", "freddo polare", "vento gelido", "lago ghiacciato",
             "terre del nord", "passo innevato", "sotto la neve", "sta nevicando",
+            "in mezzo alla neve", "tra i ghiacci",
         ],
         "keywords": [
             "neve", "ghiaccio", "ghiacciaio", "gelo", "tundra", "artico",
@@ -163,13 +352,14 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
         "preferred_moods": ["esplorazione", "metropoli", "indagine"],
         "specificity": 1.6,
         "phrases": [
-            "nel deserto", "in un deserto", "dune di sabbia", "distesa di sabbia",
-            "sole cocente", "tempesta di sabbia", "vento caldo del deserto",
+            "nel deserto", "in un deserto", "attraversate il deserto", "dune di sabbia",
+            "distesa di sabbia", "sole cocente", "tempesta di sabbia", "vento caldo del deserto",
             "oasi nel deserto", "carovana nel deserto", "antica piramide", "deserto sconfinato",
+            "deserto infinito",
         ],
         "keywords": [
             "deserto", "duna", "dune", "sabbia", "oasi", "miraggio", "cammello", "cammelli",
-            "piramide", "piramidi", "faraone", "sfinge", "arido", "arida", "siccita", "beduini", "canyon",
+            "piramide", "piramidi", "faraone", "sfinge", "siccita", "beduini",
         ],
         "stems": ("desert", "sabbios", "piramid"),
         "query": "Arabian desert dunes oasis RPG soundtrack oud duduk instrumental",
@@ -186,17 +376,21 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
         "color": "#0284c7",
         "preferred_moods": ["esplorazione", "citta", "spazio"],
         "specificity": 1.5,
+        # NOTA: Rimosse "costa" e "faro" come parole singole (che causavano falsi positivi con "costa 10 monete" e "lo farò").
+        # Sono ora riconosciute solo in frasi chiare ("lungo la costa", "torre del faro", "faro sul mare", "alto mare", ecc.).
         "phrases": [
             "alto mare", "in mezzo al mare", "in mezzo all oceano", "a bordo della nave",
-            "salpate l ancora", "issate le vele", "ponte della nave", "nave pirata",
-            "isola deserta", "sulla spiaggia", "lungo la costa", "scogliera a picco",
+            "salpate in alto mare", "salpate l ancora", "issate le vele", "ponte della nave",
+            "nave pirata", "isola deserta", "sulla spiaggia", "lungo la costa",
+            "costa frastagliata", "scogliera a picco", "torre del faro", "faro sul mare",
+            "navigate verso", "in mare aperto", "solcate le onde",
         ],
         "keywords": [
-            "mare", "oceano", "nave", "veliero", "galeone", "barca", "scialuppa", "isola",
-            "arcipelago", "spiaggia", "costa", "scogliera", "baia", "laguna", "onde",
-            "navigare", "navigazione", "ciurma", "pirata", "pirati", "capitano", "timone", "vele", "faro",
+            "mare", "oceano", "veliero", "galeone", "scialuppa", "arcipelago",
+            "spiaggia", "scogliera", "baia", "laguna", "navigare", "navigazione",
+            "ciurma", "pirata", "pirati", "timone", "vele", "salpate", "salpare",
         ],
-        "stems": ("ocean", "navig", "marittim", "costier"),
+        "stems": ("ocean", "navig", "marittim"),
         "query": "Divinity Original Sin 2 The Queen High Seas ocean ship voyage rpg instrumental",
         "seed_tracks": [
             {"videoId": "MF3xdAPqQtU", "title": "The Queen's High Seas (Ocean Voyage Instrumental)", "artist": "Borislav Slavov (Divinity: Original Sin 2 OST)", "duration": "2:34", "thumbnail": "https://i.ytimg.com/vi/MF3xdAPqQtU/hqdefault.jpg"},
@@ -212,12 +406,13 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
         "preferred_moods": ["esplorazione", "dungeon", "tensione"],
         "specificity": 1.6,
         "phrases": [
-            "in una palude", "nella palude", "acquitrino putrido", "nebbia fitta nella palude",
-            "acqua stagnante", "fango fino alle ginocchia", "alberi marci",
+            "in una palude", "nella palude", "palude nebbiosa", "acquitrino putrido",
+            "nebbia fitta nella palude", "acqua stagnante", "fango fino alle ginocchia",
+            "alberi marci", "vi addentrate nella palude",
         ],
         "keywords": [
             "palude", "paludi", "acquitrino", "pantano", "stagno", "mangrovie",
-            "fango", "fangoso", "stagnante", "putrido", "torbiera", "brughiera",
+            "fangoso", "stagnante", "torbiera", "brughiera",
         ],
         "stems": ("palud", "acquitrin", "pantan", "fangos"),
         "query": "dark swamp marshland bog ambient rpg soundtrack instrumental",
@@ -238,7 +433,7 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
             "vegetazione fitta", "tra le liane", "rovine nella giungla",
         ],
         "keywords": [
-            "giungla", "liane", "tropicale", "pluviale", "amazzonia", "bambu", "tribale", "scimmie", "machete",
+            "giungla", "liane", "tropicale", "pluviale", "amazzonia", "bambu", "machete",
         ],
         "stems": ("giungl", "tropical", "pluvial"),
         "query": "jungle tribal drums flute exploration rpg soundtrack instrumental",
@@ -258,10 +453,10 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
             "pioggia di cenere", "fiumi di lava", "odore di zolfo", "terra vulcanica",
         ],
         "keywords": [
-            "vulcano", "cratere", "cenere", "zolfo", "geyser", "desolazione", "desolata", "desolato",
+            "vulcano", "cratere", "cenere", "zolfo", "geyser",
             "ossidiana", "caldera", "lapilli", "magma", "lava",
         ],
-        "stems": ("vulcan", "desolat"),
+        "stems": ("vulcan",),
         "query": "volcanic ashlands Mordor dark orchestral ambient rpg instrumental",
         "seed_tracks": [
             {"videoId": "5hgebnIc_3Q", "title": "The Black Land (Volcanic Wasteland Instrumental)", "artist": "Dreyma", "duration": "3:27", "thumbnail": "https://i.ytimg.com/vi/5hgebnIc_3Q/hqdefault.jpg"},
@@ -277,13 +472,14 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
         "specificity": 1.5,
         "phrases": [
             "scoppia una tempesta", "scoppia un temporale", "piove a dirotto",
-            "sotto la pioggia", "vento impetuoso", "cielo in tempesta",
+            "sotto la pioggia battente", "vento impetuoso", "cielo in tempesta",
+            "sotto il diluvio",
         ],
         "keywords": [
             "tempesta", "temporale", "diluvio", "nubifragio", "uragano", "tifone",
-            "pioggia", "acquazzone", "grandine",
+            "acquazzone", "grandine",
         ],
-        "stems": ("tempest", "temporal", "diluvi", "piov"),
+        "stems": ("tempest", "temporal", "diluvi", "nubifrag"),
         "query": "Stormy Night Brandon Fiechter dark rain RPG soundtrack instrumental",
         "seed_tracks": [
             {"videoId": "CL86A34hzfU", "title": "Stormy Night (Rain & Storm Instrumental)", "artist": "Brandon Fiechter", "duration": "3:46", "thumbnail": "https://i.ytimg.com/vi/CL86A34hzfU/hqdefault.jpg"},
@@ -296,15 +492,17 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
         "color": "#eab308",
         "preferred_moods": ["citta", "esplorazione"],
         "specificity": 1.5,
+        # NOTA: Rimosso "reale" isolato (che faceva scattare il castello con "è reale" / "in tempo reale").
         "phrases": [
-            "sala del trono", "corte del re", "palazzo reale", "castello reale",
+            "sala del trono", "corte del re", "corte reale", "palazzo reale", "castello reale",
             "al cospetto del re", "al cospetto della regina", "banchetto reale", "salone delle feste",
+            "entrate nel castello", "dentro la reggia",
         ],
         "keywords": [
-            "castello", "reggia", "trono", "corte", "reale", "monarca", "imperatore",
-            "regina", "principe", "principessa", "nobile", "nobili", "aristocrazia", "duca", "barone", "feudo",
+            "reggia", "trono", "monarca", "imperatore",
+            "regina", "principe", "principessa", "aristocrazia", "feudo",
         ],
-        "stems": ("castell", "reggi", "aristocr"),
+        "stems": ("reggi", "aristocr"),
         "query": "medieval royal court castle throne room harpsichord lute instrumental",
         "seed_tracks": [
             {"videoId": "btaUZ25yNU8", "title": "In the Palace of Fair King (Royal Court Instrumental)", "artist": "Andrei Krylov", "duration": "1:39", "thumbnail": "https://i.ytimg.com/vi/btaUZ25yNU8/hqdefault.jpg"},
@@ -319,14 +517,14 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
         "preferred_moods": ["mistero", "esplorazione", "citta"],
         "specificity": 1.5,
         "phrases": [
-            "tempio sacro", "antico tempio", "dentro la cattedrale", "dentro la chiesa",
-            "santuario divino", "altare sacro", "monastero antico",
+            "tempio sacro", "antico tempio", "entrate nel tempio", "dentro la cattedrale",
+            "dentro la chiesa", "santuario divino", "altare sacro", "monastero antico",
         ],
         "keywords": [
             "tempio", "santuario", "cattedrale", "chiesa", "monastero", "abbazia", "convento",
-            "capella", "sacro", "sacra", "divino", "divina", "celestiale", "sacerdote", "preghiera", "reliquia",
+            "cappella", "sacerdote", "preghiera", "reliquia",
         ],
-        "stems": ("tempi", "cattedral", "santuari", "monaster"),
+        "stems": ("cattedral", "santuari", "monaster"),
         "query": "Holy Temple Michael Ghelfi sacred cathedral ambient rpg instrumental",
         "seed_tracks": [
             {"videoId": "UkYyGgXAuAY", "title": "Holy Temple (Sacred Sanctuary Instrumental)", "artist": "Michael Ghelfi", "duration": "7:28", "thumbnail": "https://i.ytimg.com/vi/UkYyGgXAuAY/hqdefault.jpg"},
@@ -341,14 +539,15 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
         "preferred_moods": ["dungeon", "tensione", "occulto"],
         "specificity": 1.6,
         "phrases": [
-            "in un cimitero", "vecchio cimitero", "tra le lapidi", "villaggio abbandonato",
-            "citta fantasma", "rovine maledette", "terra maledetta", "processione funebre",
+            "in un cimitero", "nel cimitero", "vecchio cimitero", "tra le lapidi",
+            "villaggio abbandonato", "citta fantasma", "rovine maledette",
+            "terra maledetta", "processione funebre",
         ],
         "keywords": [
             "cimitero", "lapide", "lapidi", "necropoli", "mausoleo", "camposanto",
-            "maledetto", "maledetta", "spettrale", "fantasma", "fantasmi", "spettro", "corvi", "forca",
+            "spettrale", "fantasma", "fantasmi",
         ],
-        "stems": ("cimiter", "necrop", "maledett", "spettral"),
+        "stems": ("cimiter", "necrop", "camposant"),
         "query": "Dark Cemetery Derek Fiechter graveyard gothic strings rpg instrumental",
         "seed_tracks": [
             {"videoId": "n38lNt8fQyA", "title": "Dark Cemetery (Graveyard Instrumental)", "artist": "Derek Fiechter, Brandon Fiechter", "duration": "3:36", "thumbnail": "https://i.ytimg.com/vi/n38lNt8fQyA/hqdefault.jpg"},
@@ -363,14 +562,15 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
         "preferred_moods": ["dungeon", "esplorazione"],
         "specificity": 1.5,
         "phrases": [
-            "in una miniera", "miniera abbandonata", "citta nanica", "forgia dei nani",
-            "caverna sotterranea", "grotta profonda", "caverna di cristallo", "sotto la montagna",
+            "in una miniera", "nella miniera", "miniera abbandonata", "citta nanica",
+            "forgia dei nani", "caverna sotterranea", "grotta profonda",
+            "caverna di cristallo", "sotto la montagna",
         ],
         "keywords": [
-            "miniera", "miniere", "nani", "nanico", "nanica", "forgia", "fucina", "incudine",
-            "piccone", "mithril", "stalattiti", "stalagmiti", "grotta", "caverna", "caverne", "sottosuolo",
+            "miniera", "miniere", "nanico", "nanica", "forgia", "fucina", "incudine",
+            "piccone", "mithril", "stalattiti", "stalagmiti",
         ],
-        "stems": ("minier", "cavern", "grott", "nanic"),
+        "stems": ("minier", "nanic", "stalattit", "stalagmit"),
         "query": "dwarven city forge underground cavern mine rpg soundtrack instrumental",
         "seed_tracks": [
             {"videoId": "s2k0HHYgNRQ", "title": "Dwarven Castles (Underground Mine Instrumental)", "artist": "MOAIGAMES", "duration": "2:06", "thumbnail": "https://i.ytimg.com/vi/s2k0HHYgNRQ/hqdefault.jpg"},
@@ -386,13 +586,13 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
         "specificity": 1.5,
         "phrases": [
             "fiera del paese", "festa del villaggio", "tendone del circo",
-            "ballo in maschera", "torneo cavalleresco",
+            "ballo in maschera", "torneo cavalleresco", "nel mezzo del festival",
         ],
         "keywords": [
             "fiera", "carnevale", "circo", "festival", "giullare", "acrobati",
-            "tendone", "giostra", "torneo", "spettacolo",
+            "tendone", "giostra", "torneo",
         ],
-        "stems": ("carneval", "spettacol"),
+        "stems": ("carneval", "giullar"),
         "query": "Medieval Festival Michael Ghelfi fair carnival lute fiddle instrumental",
         "seed_tracks": [
             {"videoId": "T9IfGvWC32E", "title": "Medieval Festival (Fair & Carnival Instrumental)", "artist": "Michael Ghelfi", "duration": "7:43", "thumbnail": "https://i.ytimg.com/vi/T9IfGvWC32E/hqdefault.jpg"},
@@ -404,15 +604,16 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
         "env_id": "biblioteca_torre",
         "name": "📚 Biblioteca & Torre Arcana",
         "color": "#8b5cf6",
-        "preferred_moods": ["mistero", "indagine"],
+        "preferred_moods": ["mistero", "indagine", "deduzione"],
         "specificity": 1.5,
         "phrases": [
             "antica biblioteca", "torre del mago", "torre arcana", "accademia di magia",
             "laboratorio alchemico", "scaffali pieni di libri", "osservatorio astronomico",
+            "entrate nella biblioteca",
         ],
         "keywords": [
-            "biblioteca", "libreria", "torre", "accademia", "universita", "osservatorio",
-            "laboratorio", "alchimia", "alchemico", "pergamene", "tomi", "manoscritti",
+            "biblioteca", "accademia", "osservatorio",
+            "alchimia", "alchemico", "manoscritti", "grimorio",
         ],
         "stems": ("bibliotec", "alchem", "accademi"),
         "query": "Skyrim Secunda Masser arcane library wizard tower mystery rpg instrumental",
@@ -427,16 +628,16 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
         "name": "⛰️ Montagne & Vette Rocciose",
         "color": "#64748b",
         "preferred_moods": ["esplorazione"],
-        "specificity": 1.1,
+        "specificity": 1.2,
         "phrases": [
             "passo di montagna", "sentiero di montagna", "vette rocciose", "scalate la montagna",
-            "in cima alla montagna", "canyon roccioso", "tra le montagne",
+            "in cima alla montagna", "canyon roccioso", "tra le montagne", "sulle montagne",
         ],
         "keywords": [
-            "montagna", "montagne", "vetta", "vette", "picco", "dirupo", "precipizio",
-            "burrone", "rupe", "altipiano", "altopiano", "valico",
+            "montagna", "montagne", "vetta", "vette", "dirupo", "precipizio",
+            "burrone", "altipiano", "altopiano", "valico",
         ],
-        "stems": ("montagn", "roccios"),
+        "stems": ("montagn",),
         "query": "Skyrim The Jerall Mountains Jeremy Soule highland mountain rpg instrumental",
         "seed_tracks": [
             {"videoId": "2lBU5bi-u-I", "title": "The Jerall Mountains (Highland Instrumental)", "artist": "Jeremy Soule (Skyrim OST)", "duration": "3:20", "thumbnail": "https://i.ytimg.com/vi/2lBU5bi-u-I/hqdefault.jpg"},
@@ -449,17 +650,17 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
         "name": "🌲 Foresta & Vallata Verde",
         "color": "#10b981",
         "preferred_moods": ["esplorazione"],
-        "specificity": 1.0,
+        "specificity": 1.1,
         "phrases": [
             "in una valle", "nella valle", "in una foresta", "nella foresta", "nel bosco",
             "bosco elfico", "foresta incantata", "foresta antica", "verde vallata",
-            "radura nel bosco", "lungo il fiume", "attraversate il bosco",
+            "radura nel bosco", "lungo il fiume", "attraversate il bosco", "attraversate la foresta",
         ],
         "keywords": [
-            "valle", "vallata", "foresta", "bosco", "boscaglia", "radura", "alberi", "quercia",
-            "prato", "prateria", "pianura", "collina", "colline", "fiume", "ruscello", "cascata", "elfico",
+            "vallata", "foresta", "boscaglia", "radura",
+            "prateria", "ruscello", "cascata", "elfico",
         ],
-        "stems": ("forest", "vallat", "collin", "prateri"),
+        "stems": ("forest", "vallat", "prateri"),
         "query": "Elder Scrolls Through Sunflower Fields Far Horizons forest valley rpg instrumental",
         "seed_tracks": [
             {"videoId": "wZ5B82Zvgqg", "title": "Through Sunflower Fields (Valley Instrumental)", "artist": "Brad Derrick (Elder Scrolls OST)", "duration": "9:00", "thumbnail": "https://i.ytimg.com/vi/wZ5B82Zvgqg/hqdefault.jpg"},
@@ -470,11 +671,11 @@ ENVIRONMENT_BIOMES: List[Dict[str, Any]] = [
     },
 ]
 
-# Indicatori sintattici italiani di posizione/ingresso in un ambiente ("siete in...", "entrate in...", "vi trovate...")
 LOCATIVE_PATTERNS = (
     "siete in ", "siete nel ", "siete nella ", "siete nello ", "siete nei ", "siete nelle ", "siete sul ", "siete sulla ",
     "siamo in ", "siamo nel ", "siamo nella ", "vi trovate ", "entrate ", "entrano ", "arrivate ", "arriviamo ",
     "attraversate ", "camminate ", "viaggiate ", "davanti a voi ", "intorno a voi ", "vi addentrate ", "scendete ", "salite ",
+    "navigate ", "salpate ", "sbarcate ", "giungete ",
 )
 
 
@@ -486,12 +687,17 @@ class HybridAnalyzer:
         self.context_window.clear()
 
     def _detect_environment_biome(
-        self, norm_text: str, words: set, moods: Dict[str, Any]
+        self,
+        norm_text: str,
+        words: Set[str],
+        moods: Dict[str, Any],
+        is_direct_command: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """
-        Rileva se la frase descrive uno specifico bioma o ambiente (es. "siete in una valle innevata",
-        "siete in un deserto", "siete in una palude", "alto mare", "sala del trono", "tempio", ecc.)
-        e restituisce tracce e query 100% strumentali pertinenti all'ambiente esatto.
+        Rileva se la frase descrive uno specifico bioma o ambiente.
+        Per evitare falsi positivi da singole parole fuori contesto:
+        - Richiede una frase multi-parola del bioma, OPPURE un indicatore locativo + keyword,
+          OPPURE almeno 2 keyword distinte del bioma (a meno che non sia un comando vocale esplicito "bardo metti ...").
         """
         has_locative = any(lp in norm_text for lp in LOCATIVE_PATTERNS)
         best_biome: Optional[Dict[str, Any]] = None
@@ -501,37 +707,48 @@ class HybridAnalyzer:
         for biome in ENVIRONMENT_BIOMES:
             raw_score = 0.0
             hits: List[str] = []
+            phrase_matched = False
 
             for phrase in biome.get("phrases", []):
                 if phrase in norm_text:
-                    raw_score += 6.0
+                    raw_score += 6.5
                     hits.append(phrase)
+                    phrase_matched = True
 
+            kw_count = 0
             for kw in biome.get("keywords", []):
                 if kw in words:
-                    raw_score += 4.2
+                    raw_score += 3.8
                     hits.append(kw)
+                    kw_count += 1
 
             for stem in biome.get("stems", ()):
                 for w in words:
-                    if len(w) >= 4 and w.startswith(stem) and w not in hits:
-                        raw_score += 4.2
+                    if len(w) >= 5 and w.startswith(stem) and w not in hits:
+                        raw_score += 3.8
                         hits.append(w)
+                        kw_count += 1
                         break
 
             if raw_score > 0:
                 if has_locative:
-                    raw_score += 2.5
+                    raw_score += 2.8
+
+                # Regola anti-falso-positivo: una singola parola chiave isolata senza frase né locativo
+                # non basta per forzare un bioma (a meno di un comando diretto "bardo metti neve")!
+                if not is_direct_command and not phrase_matched and not has_locative and kw_count < 2:
+                    continue
+
                 weighted_score = round(raw_score * float(biome.get("specificity", 1.0)), 2)
                 if weighted_score > best_score:
                     best_score = weighted_score
                     best_biome = biome
                     best_hits = list(dict.fromkeys(hits))
 
-        if not best_biome or best_score < 3.5:
+        min_required = 3.0 if is_direct_command else 5.2
+        if not best_biome or best_score < min_required:
             return None
 
-        # Scegli il mood contenitore attivo nel profilo corrente (default: esplorazione o il primo disponibile)
         target_mood_id = None
         for pm in best_biome.get("preferred_moods", []):
             if pm in moods:
@@ -578,8 +795,7 @@ class HybridAnalyzer:
         )
         if cmd_match:
             target = cmd_match.group(1).strip()
-            # Prima controlla se il comando richiede un ambiente specifico (es. "bardo metti deserto", "musica da neve")
-            env_res = self._detect_environment_biome(target, set(target.split()), moods)
+            env_res = self._detect_environment_biome(target, set(target.split()), moods, is_direct_command=True)
             if env_res:
                 env_res["matched_by"] = "command"
                 env_res["confidence"] = 10.0
@@ -601,33 +817,47 @@ class HybridAnalyzer:
                     }
         return None
 
-    def _detect_danger_and_urgency(self, norm_text: str, words: set) -> Tuple[str, List[str]]:
+    def _detect_danger_and_urgency(self, affirmed_text: str, words: Set[str]) -> Tuple[str, List[str]]:
         """
-        Analizza se la frase contiene indicatori di pericolo attivo, fuoco/fiamme, agonia, danno o combattimento.
+        Analizza SOLO la porzione AFFERMATA (non negata) della frase per verificare se contiene
+        indicatori di pericolo attivo, fuoco/fiamme ostili, agonia, danno o combattimento.
         Restituisce: ("none" | "combat_danger" | "catastrophic", lista_termini_rilevati)
         """
-        # Eccezione: se la frase dice esplicitamente "fuoco da campo" o "intorno al fuoco" senza parole di danno
-        if ("fuoco da campo" in norm_text or "accendete il falo" in norm_text) and not any(
-            w.startswith(("bruci", "danni", "attacc", "ferit", "muor", "morend")) for w in words
-        ):
+        if not affirmed_text:
             return "none", []
+
+        # Se la frase parla di un fuoco da campo/camino ("intorno al fuoco", "fuoco del camino", ecc.)
+        # rimuovi la sequenza innocua prima di cercare pericoli
+        working_text = affirmed_text
+        for cozy_pat in SAFE_COZY_FIRE_PATTERNS:
+            if cozy_pat in working_text:
+                working_text = working_text.replace(cozy_pat, "bivacco tranquillo")
+
+        working_words = set(working_text.split())
 
         catastrophic_hits: List[str] = []
         for pat in CATASTROPHIC_PHRASES:
-            if pat in norm_text:
+            if pat in working_text:
                 catastrophic_hits.append(pat)
 
         danger_hits: List[str] = []
-        for w in words:
+        for dmg_pat in COMBAT_DAMAGE_PHRASES:
+            if dmg_pat in working_text:
+                danger_hits.append(dmg_pat)
+
+        for w in working_words:
             if w in DANGER_EXACT_WORDS:
                 danger_hits.append(w)
             elif len(w) >= 5 and w.startswith(DANGER_WORD_STEMS):
+                # Evita falsi positivi: "feritoia" non è "ferito", "armadio" non è "arma"
+                if w in ("feritoia", "feritoie"):
+                    continue
                 danger_hits.append(w)
 
         if catastrophic_hits:
-            return "catastrophic", catastrophic_hits + danger_hits[:2]
+            return "catastrophic", list(dict.fromkeys(catastrophic_hits + danger_hits[:2]))
         if danger_hits:
-            return "combat_danger", danger_hits
+            return "combat_danger", list(dict.fromkeys(danger_hits))
         return "none", []
 
     def analyze_keywords(
@@ -639,18 +869,19 @@ class HybridAnalyzer:
         """
         Analizza il testo parlato in italiano applicando:
         1. Comandi vocali diretti
-        2. Pattern di fine scontro / vittoria
-        3. Veto semantico anti-errore (nessuna scena di pericolo/fuoco/ferite può mai attivare Riposo/Taverna!)
-        4. Matching di frasi, parole chiave e radici morfologiche.
+        2. Separazione tra clausole affermate e clausole negate ("non ci sono nemici" non attiva combattimento!)
+        3. Disambiguazione degli omografi ("vi danno il benvenuto", "intorno al fuoco", "costa 10 monete", "lo farò")
+        4. Veto semantico rigido sui pericoli
+        5. Matching preciso di frasi, parole chiave e morfologia sicura.
         """
-        norm_text = normalize_italian(raw_text)
-        if not norm_text:
+        full_norm = normalize_italian(raw_text)
+        if not full_norm:
             return {"mood_id": None, "confidence": 0.0, "matched_by": "none", "matched_terms": []}
 
         moods: Dict[str, Any] = profile.get("moods", {})
 
         # 1. Controlla prima se è un comando vocale diretto
-        cmd = self.detect_voice_command(norm_text, moods)
+        cmd = self.detect_voice_command(full_norm, moods)
         if cmd:
             return cmd
 
@@ -663,34 +894,49 @@ class HybridAnalyzer:
             "nemici sono morti",
             "pericolo e passato",
             "siete fuori pericolo",
+            "pericolo scampato",
             "uscite dal combattimento",
         ]
         for pat in combat_end_patterns:
-            if pat in norm_text:
+            if pat in full_norm:
                 if "vittoria" in moods:
                     return {
                         "mood_id": "vittoria",
-                        "confidence": 5.0,
+                        "confidence": 5.5,
                         "matched_by": "keywords",
                         "matched_terms": [pat],
+                        "force_change": True,
                     }
                 default_mood = profile.get("default_mood")
                 if default_mood and default_mood in moods:
                     return {
                         "mood_id": default_mood,
-                        "confidence": 4.5,
+                        "confidence": 5.0,
                         "matched_by": "keywords",
                         "matched_terms": [pat],
+                        "force_change": True,
                     }
 
-        words = set(norm_text.split())
-        danger_level, danger_terms = self._detect_danger_and_urgency(norm_text, words)
+        # 3. Separa le clausole affermate da quelle negate ("non ci sono nemici, ma entrate nella locanda")
+        affirmed_raw, negated_raw = split_affirmed_and_negated_text(raw_text)
+        affirmed_text = clean_false_positive_collocations(affirmed_raw)
 
-        # 3. Se non c'è pericolo/combattimento attivo, controlla se il GM sta descrivendo un BIOMA/AMBIENTE specifico
-        # (es. "siete in una valle innevata", "siete in un deserto", "siete in una palude", "alto mare", ecc.)
+        if not affirmed_text:
+            return {
+                "mood_id": None,
+                "confidence": 0.0,
+                "matched_by": "negated",
+                "matched_terms": [],
+                "negated_clause": negated_raw,
+            }
+
+        words = set(affirmed_text.split())
+        danger_level, danger_terms = self._detect_danger_and_urgency(affirmed_text, words)
+
+        # 4. Se non c'è pericolo attivo, verifica se il GM sta descrivendo un BIOMA/AMBIENTE specifico
         env_res: Optional[Dict[str, Any]] = None
         if danger_level == "none":
-            env_res = self._detect_environment_biome(norm_text, words, moods)
+            env_res = self._detect_environment_biome(affirmed_text, words, moods, is_direct_command=False)
 
         scores: Dict[str, float] = {}
         matched_terms_map: Dict[str, List[str]] = {}
@@ -699,42 +945,44 @@ class HybridAnalyzer:
             tone = mood.get("tone_profile", "")
             is_calm_mood = (mood_id in CALM_MOOD_IDS) or (tone in CALM_TONE_PROFILES)
 
-            # VETO SEMANTICO RIGIDO: se c'è pericolo, fuoco, ferite, morte o combattimento nella frase,
-            # le atmosfere calme/riposo/taverna vengono BLOCCATE!
+            # VETO SEMANTICO RIGIDO: se c'è pericolo attivo affermato, le atmosfere calme vengono bloccate
             if danger_level != "none" and is_calm_mood:
                 continue
 
             score = 0.0
             hits: List[str] = []
 
-            # Frasi multi-parola (peso alto: 4.0)
             for phrase in mood.get("phrases", []):
                 norm_phrase = normalize_italian(phrase)
-                if norm_phrase and norm_phrase in norm_text:
-                    score += 4.0
+                if norm_phrase and norm_phrase in affirmed_text:
+                    score += 4.5
                     hits.append(phrase)
 
-            # Parole chiave singole e radici morfologiche sicure (lunghezza >= 6)
             for kw in mood.get("keywords", []):
                 norm_kw = normalize_italian(kw)
                 if not norm_kw:
                     continue
                 if " " in norm_kw:
-                    if norm_kw in norm_text:
-                        score += 3.0
+                    if norm_kw in affirmed_text:
+                        score += 3.2
                         hits.append(kw)
                 elif norm_kw in words:
-                    score += 2.2
+                    score += 2.4
                     hits.append(kw)
                 elif len(norm_kw) >= 6:
+                    # Matching morfologico controllato (solo desinenza finale o/a/i/e su radici >= 5 char)
                     stem = norm_kw[:-1]
                     for w in words:
-                        if len(w) >= 6 and abs(len(w) - len(norm_kw)) <= 3 and w.startswith(stem):
+                        if (
+                            len(w) >= 6
+                            and abs(len(w) - len(norm_kw)) <= 2
+                            and w.startswith(stem)
+                            and w not in ("massimo", "massima", "massimi", "lampada", "lampade", "cardinale")
+                        ):
                             score += 1.8
                             hits.append(kw)
                             break
 
-            # Boost semantico automatico per le atmosfere di Combattimento / Azione / Boss quando c'è pericolo!
             if danger_level != "none":
                 has_boss_entity = any(
                     bw in words
@@ -749,7 +997,7 @@ class HybridAnalyzer:
                         for dt in danger_terms[:2]:
                             if dt not in hits:
                                 hits.append(dt)
-                elif mood_id in ("combattimento", "sparatoria", "fuga", "terrore") or tone == "fast_combat":
+                elif mood_id in ("combattimento", "sparatoria", "fuga", "terrore", "inseguimento_poliziesco") or tone == "fast_combat":
                     score += 4.2
                     for dt in danger_terms[:2]:
                         if dt not in hits:
@@ -760,13 +1008,11 @@ class HybridAnalyzer:
                 matched_terms_map[mood_id] = list(dict.fromkeys(hits))
 
         if env_res:
-            # Se è stato rilevato un ambiente/bioma specifico (es. "valle innevata", "deserto", "palude", "mare"),
-            # ha priorità assoluta a meno che la frase non sia esplicitamente su taverna/riposo/vittoria con punteggio superiore
             if not scores:
                 return env_res
             best_mood_id = max(scores, key=lambda k: scores[k])
             best_score = scores[best_mood_id]
-            if best_mood_id in ("taverna", "accampamento", "vittoria", "club") and best_score > env_res["confidence"]:
+            if best_mood_id in ("taverna", "accampamento", "vittoria", "club", "rivelazione") and best_score >= env_res["confidence"] * 0.75:
                 pass
             else:
                 env_res["all_scores"] = scores
@@ -791,6 +1037,7 @@ class HybridAnalyzer:
                 "matched_by": "keywords",
                 "matched_terms": matched_terms_map.get(best_mood_id, []),
                 "all_scores": scores,
+                "danger_level": danger_level,
             }
 
         return {
@@ -810,15 +1057,17 @@ class HybridAnalyzer:
         current_mood_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Usa un modello AI (Gemini, Ollama locale o OpenAI) per interpretare il contesto
-        narrativo del Game Master, rispettando anch'esso il veto semantico sui pericoli.
+        Usa un modello AI opzionale (Gemini, Ollama locale o OpenAI) per interpretare
+        il contesto narrativo, passando la chiave Gemini tramite header `x-goog-api-key`
+        (mai nell'URL!).
         """
         moods = profile.get("moods", {})
         if not moods:
             return {"mood_id": None, "confidence": 0.0, "matched_by": "none"}
 
-        norm_text = normalize_italian(raw_text)
-        danger_level, _ = self._detect_danger_and_urgency(norm_text, set(norm_text.split()))
+        affirmed_raw, _ = split_affirmed_and_negated_text(raw_text)
+        affirmed_clean = clean_false_positive_collocations(affirmed_raw)
+        danger_level, _ = self._detect_danger_and_urgency(affirmed_clean, set(affirmed_clean.split()))
 
         moods_catalog = []
         for mid, m in moods.items():
@@ -833,8 +1082,9 @@ class HybridAnalyzer:
         prompt = f"""Sei il regista musicale di una sessione di gioco di ruolo in italiano ({profile.get('name')}).
 Analizza le ultime frasi pronunciate al tavolo da gioco e scegli l'atmosfera musicale più adatta al RITMO e al TONO della scena.
 REGOLE CRITICHE:
-1. Se i personaggi sono in pericolo, stanno bruciando, subiscono danni o combattono, scegli SEMPRE un'atmosfera ad alta intensità (combattimento/boss/terrore/fuga) e MAI riposo o taverna!
-2. La musica deve essere ESCLUSIVAMENTE STRUMENTALE (100% instrumental, senza parole e senza cantato). Se compili custom_search_query, includi sempre "instrumental".
+1. Rispetta le negazioni ("non ci sono nemici" = NON è combattimento).
+2. Se i personaggi sono davvero in pericolo attivo, stanno bruciando, subiscono danni o combattono, scegli SEMPRE un'atmosfera ad alta intensità (combattimento/boss/terrore/fuga) e MAI riposo o taverna!
+3. La musica deve essere ESCLUSIVAMENTE STRUMENTALE (100% instrumental, senza parole e senza cantato). Se compili custom_search_query, includi sempre "instrumental".
 
 Atmosfere disponibili:
 {moods_str}
@@ -857,8 +1107,12 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido:
                 api_key = (analyzer_cfg.get("gemini_api_key") or "").strip()
                 if not api_key:
                     return {"mood_id": None, "confidence": 0.0, "matched_by": "none", "ai_error": "API Key Gemini non configurata"}
-                model = analyzer_cfg.get("gemini_model") or "gemini-2.0-flash"
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+                model = analyzer_cfg.get("gemini_model") or "gemini-2.5-flash"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                headers = {
+                    "x-goog-api-key": api_key,
+                    "Content-Type": "application/json",
+                }
                 payload = {
                     "contents": [{"parts": [{"text": prompt}]}],
                     "generationConfig": {
@@ -867,7 +1121,7 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido:
                     },
                 }
                 async with httpx.AsyncClient(timeout=6.0) as client:
-                    resp = await client.post(url, json=payload)
+                    resp = await client.post(url, json=payload, headers=headers)
                     resp.raise_for_status()
                     data = resp.json()
                     text_out = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -933,11 +1187,13 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido:
                 "matched_terms": [reason] if reason else [],
             }
         except Exception as e:
+            # Oscura eventuali chiavi nel caso remoto compaiano in messaggi di eccezione
+            safe_err = re.sub(r"AIza[0-9A-Za-z_-]{20,}", "[REDACTED_KEY]", str(e))
             return {
                 "mood_id": None,
                 "confidence": 0.0,
                 "matched_by": "none",
-                "ai_error": str(e),
+                "ai_error": safe_err,
             }
 
     async def analyze(
@@ -953,7 +1209,7 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido:
 
         self.context_window.append(cleaned)
         mode = analyzer_cfg.get("mode", "hybrid")
-        threshold = float(analyzer_cfg.get("confidence_threshold", 2.0))
+        threshold = float(analyzer_cfg.get("confidence_threshold", 2.2))
 
         kw_result = self.analyze_keywords(cleaned, profile, threshold=threshold)
 
@@ -965,6 +1221,8 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido:
 
         if mode == "hybrid":
             if kw_result.get("mood_id") and kw_result.get("confidence", 0) >= threshold:
+                return kw_result
+            if kw_result.get("matched_by") == "negated":
                 return kw_result
             ai_res = await self.analyze_with_ai(cleaned, profile, analyzer_cfg, current_mood_id)
             if ai_res.get("mood_id"):
@@ -978,3 +1236,34 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido:
             return kw_result
 
         return kw_result
+
+    def analyze_quick(self, raw_text: str, profile_id: str = "fantasy_dnd") -> "AnalysisResult":
+        """Analisi sincrona ad alta velocità basata su regole/keyword, ideale per unit test e verifiche rapide."""
+        from config_defaults import DEFAULT_CONFIG
+        profiles = DEFAULT_CONFIG["profiles"]
+        profile = profiles.get(profile_id) or profiles.get("fantasy_dnd") or next(iter(profiles.values()))
+        res = self.analyze_keywords(raw_text, profile)
+        return AnalysisResult(res)
+
+
+class AnalysisResult:
+    """Wrapper ergonomico per accedere ai risultati di analisi sia come attributi che come dict."""
+
+    def __init__(self, data: Dict[str, Any]) -> None:
+        self.data = data
+        self.mood = data.get("mood_id")
+        self.biome = data.get("env_id")
+        self.confidence = float(data.get("confidence", 0.0) or 0.0)
+        self.matched_by = str(data.get("matched_by") or "")
+        self.matched_terms = list(data.get("matched_terms") or [])
+        self.danger_level = str(data.get("danger_level") or "none")
+
+    def __getitem__(self, item: str) -> Any:
+        return self.data.get(item)
+
+    def get(self, item: str, default: Any = None) -> Any:
+        return self.data.get(item, default)
+
+
+SceneAnalyzer = HybridAnalyzer
+

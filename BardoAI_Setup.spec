@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('C:/Users/dizio/Music/PROGETTO/installer_payload.zip', '.'), ('C:/Users/dizio/Music/PROGETTO/bardo_icon.ico', '.')]
+datas = [('installer_payload.zip', '.'), ('bardo_icon.ico', '.')]
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('customtkinter')
@@ -33,7 +33,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
@@ -42,5 +42,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:/Users/dizio/Music/PROGETTO/bardo_icon.ico'],
+    icon=['bardo_icon.ico'],
+    version='version_setup.txt',
 )

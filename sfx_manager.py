@@ -1,63 +1,49 @@
 """
-Gestore della Libreria Interna di Effetti Sonori (SFX) e Soundboard Istantanea ad Alta Chiarezza.
-Include:
-- Catalogo di 20 effetti sonori GdR masterizzati ad alta presenza (spadate, artigliate, frecce, scudi, ruggiti, magie, porte, dadi, monete, ecc.)
-- Motore audio PCM in-memory a latenza zero tramite `sounddevice` (nessun taglio dell'attacco iniziale, polifonia a 6 canali)
-- Audio Ducking automatico della musica di sottofondo quando parte un effetto sonoro (così ogni effetto si sente nitido sopra la musica)
-- Riconoscimento vocale immediato di frasi e parole in italiano
+Gestore degli Effetti Sonori (SFX) e Soundboard Istantanea ad Alta Chiarezza.
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
+Versione: 2.6.0:
+- 20 effetti sonori masterizzati per GdR (armi, creature, magie, ambiente).
+- Caricamento in RAM come PCM float32 stereo a 48kHz tramite PyAV (zero VLC, zero problemi di codec).
+- Integrazione diretta con AudioEngine: ducking sample-accurate e soft-knee limiter.
+- Riconoscimento vocale ultra-rapido con parsing delle negazioni e matching esatto a confini di parola:
+  nessuna falsa attivazione tipo "al massimo" -> crollo, "lampada" -> tuono, "cardinale" -> porta.
+- Gestione sicura degli SFX personalizzati in %APPDATA%/BardoAI/data/custom_sfx:
+  nessun PermissionError in Program Files, nessuna sovrascrittura di file utente all'avvio.
 """
 
+from __future__ import annotations
+
+import json
+import re
 import shutil
 import sys
 import threading
 import time
-import wave
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Callable, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
+import av
 import numpy as np
-import sounddevice as sd
-import vlc_runtime  # noqa: F401
-import vlc
 
-from analyzer import normalize_italian
+from analyzer import normalize_italian, split_affirmed_and_negated_text
+from storage import CUSTOM_SFX_DIR, DATA_DIR, ensure_data_dir
 
 
-def resolve_sfx_directories() -> Path:
-    """
-    Risolve la cartella `sfx/` sia in esecuzione da sorgente sia dentro il file .exe (PyInstaller).
-    Sincronizza automaticamente i 20 suoni masterizzati nella cartella `sfx/` accanto a BardoAI.exe.
-    """
+def get_bundled_sfx_dir() -> Path:
+    """Ritorna la cartella `sfx/` inclusa nell'applicazione (read-only)."""
     if getattr(sys, "frozen", False):
-        exe_dir = Path(sys.executable).resolve().parent
-        user_sfx_dir = exe_dir / "sfx"
-        try:
-            user_sfx_dir.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            pass
-
-        bundled_sfx_dir = Path(getattr(sys, "_MEIPASS", exe_dir)) / "sfx"
-        if bundled_sfx_dir.exists() and bundled_sfx_dir.resolve() != user_sfx_dir.resolve():
-            for wav_file in bundled_sfx_dir.glob("*.wav"):
-                target = user_sfx_dir / wav_file.name
-                try:
-                    if (
-                        not target.exists()
-                        or target.stat().st_size != wav_file.stat().st_size
-                        or abs(target.stat().st_mtime - wav_file.stat().st_mtime) > 1.0
-                    ):
-                        shutil.copy2(wav_file, target)
-                except Exception:
-                    pass
-        if user_sfx_dir.exists() and any(user_sfx_dir.glob("*.wav")):
-            return user_sfx_dir
-        if bundled_sfx_dir.exists():
-            return bundled_sfx_dir
-        return user_sfx_dir
+        base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
     else:
-        src_sfx_dir = Path(__file__).resolve().parent / "sfx"
-        src_sfx_dir.mkdir(parents=True, exist_ok=True)
-        return src_sfx_dir
+        base = Path(__file__).resolve().parent
+    bundled = base / "sfx"
+    bundled.mkdir(parents=True, exist_ok=True)
+    return bundled
+
+
+def get_custom_sfx_dir() -> Path:
+    """Ritorna la cartella scrivibile per gli SFX personalizzati dell'utente."""
+    ensure_data_dir()
+    return CUSTOM_SFX_DIR
 
 
 DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
@@ -81,8 +67,9 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "attacca con la spada",
         ],
         "keywords": [
-            "spada", "spadata", "spade", "fendente", "lama", "pugnale",
-            "pugnalata", "sciabola", "stocco", "spadone", "coltellata", "katana",
+            "spada", "spade", "spadata", "spadate", "fendente", "fendenti", "lama", "lame",
+            "pugnale", "pugnali", "pugnalata", "pugnalate", "sciabola", "sciabole", "stocco",
+            "spadone", "spadoni", "coltellata", "coltellate", "katana",
         ],
     },
     "artigli": {
@@ -102,8 +89,9 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "azzanna alla gola",
         ],
         "keywords": [
-            "artigli", "artiglio", "artigliata", "artigliate", "graffio",
-            "graffia", "zampata", "squarcio", "squarcia", "lacera", "zanne", "morso", "morde", "azzanna",
+            "artigli", "artiglio", "artigliata", "artigliate", "graffio", "graffi",
+            "graffia", "zampata", "zampate", "squarcio", "squarcia", "lacera", "zanne",
+            "morso", "morsi", "morde", "azzanna",
         ],
     },
     "scudo": {
@@ -123,7 +111,8 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "colpo di martello",
         ],
         "keywords": [
-            "scudo", "scudi", "parata", "para", "corazza", "elmo", "martello", "manganello", "mazza",
+            "scudo", "scudi", "parata", "parate", "para", "corazza", "corazze",
+            "elmo", "elmi", "martello", "martelli", "manganello", "mazza", "mazze",
         ],
     },
     "freccia": {
@@ -142,7 +131,8 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "tende l arco",
         ],
         "keywords": [
-            "freccia", "frecce", "arco", "balestra", "dardo", "scocca", "scoccare", "faretra",
+            "freccia", "frecce", "arco", "archi", "balestra", "balestre",
+            "dardo", "dardi", "scocca", "scoccare", "faretra",
         ],
     },
     "ruggito_drago": {
@@ -160,7 +150,8 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "emette un ruggito",
         ],
         "keywords": [
-            "ruggito", "ruggisce", "ruggire", "drago", "tirannosauro", "behemoth", "idra", "wyvern",
+            "ruggito", "ruggiti", "ruggisce", "ruggire", "drago", "draghi",
+            "tirannosauro", "behemoth", "idra", "wyvern",
         ],
     },
     "mostro_ringhio": {
@@ -178,8 +169,9 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "grido di guerra dell orco",
         ],
         "keywords": [
-            "ringhio", "ringhia", "ringhiare", "grugnito", "grugnisce", "orco",
-            "goblin", "troll", "ogre", "demone", "bestia", "belva", "minotauro",
+            "ringhio", "ringhi", "ringhia", "ringhiare", "grugnito", "grugniti",
+            "grugnisce", "orco", "orchi", "goblin", "troll", "ogre", "demone",
+            "demoni", "bestia", "bestie", "belva", "belve", "minotauro",
         ],
     },
     "lupo": {
@@ -196,7 +188,8 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "il lupo ulula",
         ],
         "keywords": [
-            "ululato", "ulula", "ululare", "lupo", "lupi", "licantropo", "mannaro", "branco",
+            "ululato", "ululati", "ulula", "ululare", "lupo", "lupi",
+            "licantropo", "licantropi", "mannaro", "mannari", "branco",
         ],
     },
     "zombie": {
@@ -213,7 +206,8 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "lamento spettrale",
         ],
         "keywords": [
-            "zombie", "zombi", "non-morto", "non-morti", "ghoul", "spettro", "fantasma", "gemito",
+            "zombie", "zombi", "non-morto", "non-morti", "nonmorto", "nonmorti",
+            "ghoul", "spettro", "spettri", "fantasma", "fantasmi", "gemito", "gemiti",
         ],
     },
     "urlo": {
@@ -230,7 +224,7 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "urla di terrore",
         ],
         "keywords": [
-            "urlo", "urla", "urlare", "grido", "grida", "strillo", "strilla",
+            "urlo", "urla", "urlare", "grido", "grida", "strillo", "strilli", "strilla",
         ],
     },
     "palla_di_fuoco": {
@@ -253,9 +247,9 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "avvolti dalle fiamme",
         ],
         "keywords": [
-            "esplosione", "esplode", "esplodere", "fiammata", "fiamme", "incendio",
-            "bomba", "dinamite", "granata", "pirosfera", "brucia", "bruciando",
-            "bruciate", "bruciare", "rogo",
+            "esplosione", "esplosioni", "esplode", "esplodere", "fiammata", "fiammate",
+            "fiamme", "incendio", "incendi", "bomba", "bombe", "dinamite", "granata",
+            "granate", "pirosfera", "brucia", "bruciando", "bruciate", "bruciare", "rogo",
         ],
     },
     "fulmine": {
@@ -273,7 +267,8 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "raggio elettrico",
         ],
         "keywords": [
-            "fulmine", "fulmini", "saetta", "elettrico", "elettricita", "scossa", "folgore",
+            "fulmine", "fulmini", "saetta", "saette", "elettrico", "elettrica",
+            "elettricita", "scossa", "scosse", "folgore", "folgori",
         ],
     },
     "incantesimo": {
@@ -292,8 +287,9 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "parola guaritrice",
         ],
         "keywords": [
-            "incantesimo", "magia", "pozione", "guarigione", "cura", "curare",
-            "benedizione", "teletrasporto", "evoca", "mana",
+            "incantesimo", "incantesimi", "magia", "magie", "pozione", "pozioni",
+            "guarigione", "guarigioni", "cura", "curare", "benedizione", "teletrasporto",
+            "evoca", "evocare", "mana",
         ],
     },
     "porta_scricchiola": {
@@ -311,7 +307,8 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "cigolio sinistro",
         ],
         "keywords": [
-            "scricchiola", "scricchiolio", "cigola", "cigolio", "cardini", "botola", "portone",
+            "scricchiola", "scricchiolio", "cigola", "cigolio", "cardine", "cardini",
+            "botola", "botole", "portone", "portoni",
         ],
     },
     "crollo": {
@@ -329,7 +326,8 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "frana di rocce",
         ],
         "keywords": [
-            "crollo", "crolla", "sfonda", "sfondare", "frana", "macigno", "masso", "schianto",
+            "crollo", "crolli", "crolla", "crollare", "sfonda", "sfondare",
+            "frana", "frane", "macigno", "macigni", "masso", "massi", "schianto",
         ],
     },
     "monete": {
@@ -347,7 +345,8 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "trovate un tesoro",
         ],
         "keywords": [
-            "monete", "moneta", "oro", "ducati", "borsello", "forziere", "bottino", "pagare", "ricompensa",
+            "monete", "moneta", "oro", "ducati", "ducato", "borsello", "forziere",
+            "forzieri", "bottino", "pagare", "ricompensa",
         ],
     },
     "dadi": {
@@ -385,7 +384,8 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "versa da bere",
         ],
         "keywords": [
-            "brindisi", "brindare", "boccale", "boccali", "calice", "bicchiere", "birra", "vino",
+            "brindisi", "brindare", "boccale", "boccali", "calice", "calici",
+            "bicchiere", "bicchieri", "birra", "vino",
         ],
     },
     "tuono": {
@@ -402,7 +402,8 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "lampi e tuoni",
         ],
         "keywords": [
-            "tuono", "tuoni", "temporale", "tempesta", "lampo", "nubifragio",
+            "tuono", "tuoni", "temporale", "temporali", "tempesta", "tempeste",
+            "lampo", "lampi", "nubifragio",
         ],
     },
     "campana": {
@@ -436,258 +437,313 @@ DEFAULT_SFX_LIBRARY: Dict[str, Dict[str, Any]] = {
             "cuore in gola",
         ],
         "keywords": [
-            "battito", "pulsazione", "cuore", "ansia", "panico",
+            "battito", "battiti", "pulsazione", "pulsazioni", "cuore", "ansia", "panico",
         ],
     },
 }
 
 
+def load_audio_file_to_pcm(path: Path, target_sample_rate: int = 48000) -> Optional[np.ndarray]:
+    """
+    Decodifica qualsiasi file audio supportato da PyAV (WAV, MP3, OGG, FLAC) in PCM
+    float32 stereo (N, 2) a 48000Hz normalizzato in [-1.0, 1.0].
+    """
+    if not path.is_file():
+        return None
+    try:
+        container = av.open(str(path))
+        if not container.streams.audio:
+            container.close()
+            return None
+        resampler = av.AudioResampler(format="fltp", layout="stereo", rate=target_sample_rate)
+        chunks: List[np.ndarray] = []
+        for frame in container.decode(audio=0):
+            for resampled in resampler.resample(frame):
+                chunks.append(resampled.to_ndarray())
+        container.close()
+        if not chunks:
+            return None
+        # to_ndarray con layout stereo restituisce (2, frames)
+        full = np.concatenate(chunks, axis=1).T.astype(np.float32)
+        # Assicura limiti numerici corretti
+        np.clip(full, -1.0, 1.0, out=full)
+        return full
+    except Exception as e:
+        print(f"[SFXManager] Errore decodifica audio {path}: {e}")
+        return None
+
+
 class SFXManager:
     """
-    Motore SFX stereo ibrido a latenza zero:
-    - Pre-carica i file `.wav` in RAM come array float32 stereo (N, 2) a 44.1kHz e li riproduce con un mixer polifonico
-      `sounddevice.OutputStream` sempre pronto (0ms di ritardo, nessun taglio iniziale, polifonia illimitata).
-    - Curva di volume psicoacustica logaritmica (in dB) applicata in tempo reale nel callback audio.
-    - Attiva un ducking morbido e proporzionale sulla musica di sottofondo così l'effetto si amalgama con naturalezza.
+    Gestore della Soundboard e degli SFX guidati dalla voce.
+    Si interfaccia direttamente con l'AudioEngine per il playback sample-accurate e il ducking.
     """
 
-    SAMPLE_RATE = 44100
+    SAMPLE_RATE = 48000
 
     def __init__(
         self,
+        audio_engine: Optional[Any] = None,
         on_sfx_triggered: Optional[Callable[[Dict[str, Any], str], None]] = None,
-        on_duck_music: Optional[Callable[..., None]] = None,
+        custom_sfx_dir: Optional[Path] = None,
+        bundled_sfx_dir: Optional[Path] = None,
     ) -> None:
-        self.sfx_dir: Path = resolve_sfx_directories()
+        self.audio_engine = audio_engine
         self.on_sfx_triggered = on_sfx_triggered
-        self.on_duck_music = on_duck_music
 
-        self.sfx_volume: int = 80
-        self._target_gain: float = self._vol_to_gain(self.sfx_volume)
-        self._smoothed_gain: float = self._target_gain
+        self.bundled_dir = bundled_sfx_dir or get_bundled_sfx_dir()
+        self.custom_dir = custom_sfx_dir or get_custom_sfx_dir()
+
         self.voice_sfx_enabled: bool = True
-        self.duck_music_enabled: bool = True
-        self._last_played_ts: Dict[str, float] = {}
         self.per_sfx_cooldown: float = 2.2
+        self._last_played_ts: Dict[str, float] = {}
 
-        # Cache PCM in RAM: path_str -> np.ndarray (float32 stereo (N, 2) 44100Hz)
+        # Cache PCM in RAM: path_str -> np.ndarray (N, 2) float32
         self._pcm_cache: Dict[str, np.ndarray] = {}
-        self._active_voices: List[List[Any]] = []  # [[array_stereo, cursor_int, rel_trim_float], ...]
-        self._mixer_lock = threading.Lock()
-        self._stream: Optional[sd.OutputStream] = None
+        self._cache_lock = threading.Lock()
 
-        # Fallback VLC solo per eventuali file custom .mp3/.ogg aggiunti dall'utente
-        self._vlc_fallback: Optional[vlc.Instance] = None
-        self._vlc_player: Optional[vlc.MediaPlayer] = None
+        # Cache regex compilate per keyword e frasi
+        self._compiled_keywords: Dict[str, List[re.Pattern]] = {}
+        self._compiled_phrases: Dict[str, List[str]] = {}
 
-        self._preload_wav_library()
-        self._start_pcm_mixer_stream()
+        # Libreria personalizzata persistita su file
+        self._custom_manifest_path = self.custom_dir / "manifest.json"
+        self._custom_library: Dict[str, Dict[str, Any]] = self._load_custom_manifest()
 
-    @staticmethod
-    def _vol_to_gain(vol: int) -> float:
-        """
-        Converte il valore 0..100 dello slider in guadagno lineare tramite curva psicoacustica (x^2.35).
-        Garantisce che a 50% il volume percepito sia realmente dimezzato, sotto 25% sia discreto
-        e a 0% sia silenzio assoluto.
-        """
-        v = max(0, min(100, int(vol)))
-        if v <= 0:
-            return 0.0
-        norm = v / 100.0
-        return float((norm ** 2.35) * 0.88)
+        self._compile_matchers()
+        self._preload_bundled_sfx()
 
-    def _preload_wav_library(self) -> None:
-        for wav_path in self.sfx_dir.glob("*.wav"):
-            self._load_wav_into_ram(wav_path)
-
-    def _load_wav_into_ram(self, wav_path: Path) -> Optional[np.ndarray]:
-        key = str(wav_path.resolve())
-        if key in self._pcm_cache:
-            return self._pcm_cache[key]
-        if not wav_path.exists():
-            return None
+    # ================================================================ Custom Manifest
+    def _load_custom_manifest(self) -> Dict[str, Dict[str, Any]]:
+        if not self._custom_manifest_path.is_file():
+            return {}
         try:
-            with wave.open(str(wav_path), "rb") as w:
-                n_ch = w.getnchannels()
-                sampwidth = w.getsampwidth()
-                rate = w.getframerate()
-                frames = w.readframes(w.getnframes())
-
-            if sampwidth == 2:
-                arr = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-            elif sampwidth == 4:
-                arr = np.frombuffer(frames, dtype=np.int32).astype(np.float32) / 2147483648.0
-            else:
-                arr = (np.frombuffer(frames, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
-
-            if n_ch <= 1:
-                arr = np.stack([arr, arr], axis=1)
-            else:
-                arr = arr.reshape(-1, n_ch)[:, :2]
-
-            if rate != self.SAMPLE_RATE and len(arr) > 0:
-                new_len = max(1, int(len(arr) * self.SAMPLE_RATE / rate))
-                old_idx = np.arange(len(arr))
-                new_idx = np.linspace(0, len(arr) - 1, new_len)
-                ch_l = np.interp(new_idx, old_idx, arr[:, 0]).astype(np.float32)
-                ch_r = np.interp(new_idx, old_idx, arr[:, 1]).astype(np.float32)
-                arr = np.stack([ch_l, ch_r], axis=1)
-
-            self._pcm_cache[key] = arr
-            return arr
+            with open(self._custom_manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
         except Exception as e:
-            print(f"[SFXManager] Errore caricamento WAV {wav_path}: {e}")
-            return None
+            print(f"[SFXManager] Errore lettura manifest custom SFX: {e}")
+            return {}
 
-    def _start_pcm_mixer_stream(self) -> None:
-        def audio_callback(outdata: np.ndarray, frames: int, _time_info: Any, _status: Any) -> None:
-            outdata.fill(0.0)
-            with self._mixer_lock:
-                # Inseguimento morbido del guadagno target per evitare click durante il trascinamento dello slider
-                self._smoothed_gain += 0.35 * (self._target_gain - self._smoothed_gain)
-                if not self._active_voices:
-                    return
-                still_active = []
-                mix = np.zeros((frames, 2), dtype=np.float32)
-                master_g = self._smoothed_gain
-                for voice in self._active_voices:
-                    arr, pos, rel_trim = voice
-                    rem = len(arr) - pos
-                    if rem <= 0:
-                        continue
-                    n = min(frames, rem)
-                    mix[:n] += arr[pos : pos + n] * (rel_trim * master_g)
-                    voice[1] = pos + n
-                    if voice[1] < len(arr):
-                        still_active.append(voice)
-                self._active_voices = still_active
-                # Soft-limiter trasparente senza clipping duro
-                np.tanh(mix, out=mix)
-                outdata[:, 0] = mix[:, 0]
-                if outdata.shape[1] > 1:
-                    outdata[:, 1] = mix[:, 1]
-
+    def _save_custom_manifest(self) -> None:
         try:
-            self._stream = sd.OutputStream(
-                samplerate=self.SAMPLE_RATE,
-                channels=2,
-                dtype="float32",
-                blocksize=512,
-                callback=audio_callback,
-            )
-            self._stream.start()
+            tmp = self._custom_manifest_path.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self._custom_library, f, indent=2, ensure_ascii=False)
+            tmp.replace(self._custom_manifest_path)
         except Exception as e:
-            print(f"[SFXManager] Impossibile avviare stream PCM diretto, uso fallback: {e}")
-            self._stream = None
+            print(f"[SFXManager] Errore salvataggio manifest custom SFX: {e}")
 
-    def set_volume(self, vol: int) -> None:
-        self.sfx_volume = max(0, min(100, int(vol)))
-        new_gain = self._vol_to_gain(self.sfx_volume)
-        with self._mixer_lock:
-            self._target_gain = new_gain
-        if self._vlc_player is not None:
-            try:
-                vlc_vol = int(round((self.sfx_volume / 100.0) ** 1.8 * 100.0))
-                self._vlc_player.audio_set_volume(max(0, min(100, vlc_vol)))
-            except Exception:
-                pass
+    # ================================================================ Preload & Regex
+    def _compile_matchers(self) -> None:
+        lib = self.get_library()
+        new_kw: Dict[str, List[re.Pattern]] = {}
+        new_ph: Dict[str, List[str]] = {}
+        for sid, item in lib.items():
+            # Compila keyword con word boundary esatti: \bkeyword\b
+            patterns = []
+            for kw in item.get("keywords", []):
+                norm = normalize_italian(kw).strip()
+                if norm:
+                    pat = re.compile(rf"\b{re.escape(norm)}\b", re.IGNORECASE)
+                    patterns.append(pat)
+            new_kw[sid] = patterns
 
-    def get_library(self, custom_sfx_cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Dict[str, Any]]:
+            # Normalizza le frasi
+            phrases = []
+            for ph in item.get("phrases", []):
+                norm_p = normalize_italian(ph).strip()
+                if norm_p:
+                    phrases.append(norm_p)
+            new_ph[sid] = phrases
+
+        self._compiled_keywords = new_kw
+        self._compiled_phrases = new_ph
+
+    def _preload_bundled_sfx(self) -> None:
+        """Pre-carica in memoria i WAV predefiniti in un thread in background per non bloccare l'avvio."""
+        def worker() -> None:
+            for sid, item in DEFAULT_SFX_LIBRARY.items():
+                p = self.resolve_file(item.get("file", f"{sid}.wav"))
+                if p:
+                    self._get_or_load_pcm(p)
+
+        t = threading.Thread(target=worker, daemon=True, name="sfx-preload")
+        t.start()
+
+    def resolve_file(self, filename: str) -> Optional[Path]:
+        """
+        Risolve un file audio:
+        1. Cerca in custom_dir (file aggiunto dall'utente)
+        2. Cerca in bundled_dir (asset inclusi)
+        3. Cerca come percorso assoluto
+        """
+        cand_custom = self.custom_dir / filename
+        if cand_custom.is_file():
+            return cand_custom
+        cand_bundled = self.bundled_dir / filename
+        if cand_bundled.is_file():
+            return cand_bundled
+        cand_abs = Path(filename)
+        if cand_abs.is_file():
+            return cand_abs
+        return None
+
+    def _get_or_load_pcm(self, path: Path) -> Optional[np.ndarray]:
+        key = str(path.resolve())
+        with self._cache_lock:
+            if key in self._pcm_cache:
+                return self._pcm_cache[key]
+        arr = load_audio_file_to_pcm(path, self.SAMPLE_RATE)
+        if arr is not None:
+            with self._cache_lock:
+                self._pcm_cache[key] = arr
+        return arr
+
+    # ================================================================ Library Access
+    def get_library(self) -> Dict[str, Dict[str, Any]]:
+        """Restituisce l'unione ordinata della libreria predefinita e di quella personalizzata."""
         lib = dict(DEFAULT_SFX_LIBRARY)
-        if custom_sfx_cfg and isinstance(custom_sfx_cfg, dict):
-            lib.update(custom_sfx_cfg)
+        lib.update(self._custom_library)
         return lib
 
+    def get_categories(self) -> List[str]:
+        cats = ["Tutti", "Armi", "Creature", "Magia", "Ambiente"]
+        if self._custom_library:
+            cats.append("Personalizzati")
+        return cats
+
+    def add_custom_sfx(
+        self,
+        sfx_id: str,
+        name: str,
+        source_audio_path: Path,
+        category: str = "Personalizzati",
+        icon: str = "🎵",
+        color: str = "#8b5cf6",
+        keywords: Optional[List[str]] = None,
+        phrases: Optional[List[str]] = None,
+    ) -> bool:
+        """
+        Aggiunge un SFX personalizzato: copia il file audio nella directory custom
+        e registra l'effetto nel manifest. Nessun rischio di permessi in Program Files.
+        """
+        if not source_audio_path.is_file():
+            return False
+        dest_filename = f"{sfx_id}{source_audio_path.suffix.lower()}"
+        dest_path = self.custom_dir / dest_filename
+        try:
+            shutil.copy2(source_audio_path, dest_path)
+        except Exception as e:
+            print(f"[SFXManager] Impossibile copiare il file SFX {source_audio_path}: {e}")
+            return False
+
+        item: Dict[str, Any] = {
+            "id": sfx_id,
+            "name": name,
+            "icon": icon,
+            "category": category,
+            "color": color,
+            "file": dest_filename,
+            "hint": ", ".join((keywords or [])[:3]),
+            "phrases": phrases or [],
+            "keywords": keywords or [],
+            "trim": 1.0,
+            "custom": True,
+        }
+        self._custom_library[sfx_id] = item
+        self._save_custom_manifest()
+        self._compile_matchers()
+        self._get_or_load_pcm(dest_path)
+        return True
+
+    def delete_custom_sfx(self, sfx_id: str) -> bool:
+        """Rimuove un SFX personalizzato e cancella il file corrispondente se presente in custom_dir."""
+        if sfx_id not in self._custom_library:
+            return False
+        item = self._custom_library.pop(sfx_id)
+        self._save_custom_manifest()
+        self._compile_matchers()
+        dest = self.custom_dir / item.get("file", "")
+        if dest.is_file():
+            try:
+                dest.unlink()
+            except Exception:
+                pass
+        return True
+
+    # ================================================================ Playback
     def play_sfx(
         self,
         sfx_id: str,
         reason: str = "Soundboard",
-        library: Optional[Dict[str, Any]] = None,
+        duck_music: bool = True,
     ) -> bool:
-        lib = library or DEFAULT_SFX_LIBRARY
+        """
+        Riproduce l'effetto sonoro tramite l'AudioEngine polifonico ed effettua il ducking della musica.
+        """
+        lib = self.get_library()
         item = lib.get(sfx_id)
         if not item:
             return False
 
-        file_path = self.sfx_dir / item.get("file", f"{sfx_id}.wav")
-        if not file_path.exists():
-            print(f"[SFXManager] File audio non trovato: {file_path}")
+        file_path = self.resolve_file(item.get("file", f"{sfx_id}.wav"))
+        if not file_path:
+            print(f"[SFXManager] File SFX non trovato: {item.get('file')}")
             return False
 
-        #Sincronizza sempre _target_gain con sfx_volume corrente
-        self._target_gain = self._vol_to_gain(self.sfx_volume)
-        if self.sfx_volume <= 0:
-            self._last_played_ts[sfx_id] = time.time()
-            if self.on_sfx_triggered:
-                try:
-                    self.on_sfx_triggered(item, reason)
-                except Exception:
-                    pass
-            return True
+        arr = self._get_or_load_pcm(file_path)
+        if arr is None or len(arr) == 0:
+            return False
 
-        dur_sec = 1.8
-        rel_trim = float(item.get("trim", 1.0))
+        trim = float(item.get("trim", 1.0))
+        dur_sec = len(arr) / float(self.SAMPLE_RATE)
+        self._last_played_ts[sfx_id] = time.time()
 
-        arr = self._load_wav_into_ram(file_path) if file_path.suffix.lower() == ".wav" else None
-        if arr is not None and self._stream is not None and self._stream.active:
-            dur_sec = len(arr) / float(self.SAMPLE_RATE)
-            with self._mixer_lock:
-                self._active_voices.append([arr, 0, rel_trim])
-            self._last_played_ts[sfx_id] = time.time()
-        else:
-            # Fallback per MP3/OGG personalizzati
+        if self.audio_engine is not None:
             try:
-                if self._vlc_fallback is None:
-                    self._vlc_fallback = vlc.Instance(
-                        "--no-video", "--vout=none", "--aout=directsound", "--intf=dummy", "--quiet"
-                    )
-                    self._vlc_player = self._vlc_fallback.media_player_new()
-                media = self._vlc_fallback.media_new(str(file_path))
-                self._vlc_player.set_media(media)
-                vlc_vol = int(round((self.sfx_volume / 100.0) ** 1.8 * 100.0))
-                self._vlc_player.audio_set_volume(max(0, min(100, vlc_vol)))
-                self._vlc_player.play()
-                self._last_played_ts[sfx_id] = time.time()
-            except Exception:
+                self.audio_engine.play_sfx(arr, trim)
+                if duck_music:
+                    self.audio_engine.duck(dur_sec)
+            except Exception as e:
+                print(f"[SFXManager] Errore riproduzione in AudioEngine: {e}")
                 return False
-
-        # Ducking morbido e proporzionale al volume degli effetti
-        if self.duck_music_enabled and self.on_duck_music and self.sfx_volume > 10:
-            try:
-                self.on_duck_music(dur_sec, self.sfx_volume)
-            except TypeError:
-                try:
-                    self.on_duck_music(dur_sec)
-                except Exception:
-                    pass
-            except Exception:
-                pass
 
         if self.on_sfx_triggered:
             try:
                 self.on_sfx_triggered(item, reason)
             except Exception:
                 pass
+
         return True
 
-    def detect_and_play_from_speech(
-        self,
-        raw_text: str,
-        library: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
-        if not self.voice_sfx_enabled:
+    # ================================================================ Voice Matching
+    def detect_and_play_from_speech(self, raw_text: str) -> List[Dict[str, Any]]:
+        """
+        Analizza il testo della voce trascritto in streaming o a fine frase.
+        Caratteristiche chiave per prevenire falsi positivi (risolve bug #6 di bastaaaa.md):
+        1. Parsing delle negazioni: se un termine è in una clausola negata ("non tirate i dadi"), NON si attiva.
+        2. Boundary regex esatti: "al massimo" non attiva "masso" (crollo), "lampada" non attiva "lampo" (tuono),
+           "cardinale" non attiva "cardini" (porta).
+        3. Nessuno stem trimming arbitrario tipo `stem = kw[:-1]`.
+        4. Cooldown per-SFX (2.2s).
+        """
+        if not self.voice_sfx_enabled or not raw_text.strip():
             return []
 
-        norm_text = normalize_italian(raw_text)
+        # Divide il testo in clausole affermate e negate
+        affirmed_text, _ = split_affirmed_and_negated_text(raw_text)
+        if not affirmed_text:
+            return []
+
+        norm_text = affirmed_text.strip()
         if not norm_text:
             return []
 
-        lib = library or DEFAULT_SFX_LIBRARY
-        words = set(norm_text.split())
         now = time.time()
-
         scored_matches: List[Tuple[float, str, str]] = []
 
+        lib = self.get_library()
         for sfx_id, item in lib.items():
             if now - self._last_played_ts.get(sfx_id, 0.0) < self.per_sfx_cooldown:
                 continue
@@ -695,28 +751,21 @@ class SFXManager:
             score = 0.0
             matched_term = ""
 
-            for phrase in item.get("phrases", []):
-                np_phrase = normalize_italian(phrase)
-                if np_phrase and np_phrase in norm_text:
+            # 1. Matching su frasi intere
+            for phrase in self._compiled_phrases.get(sfx_id, []):
+                if phrase in norm_text:
                     score += 4.0
                     matched_term = phrase
                     break
 
+            # 2. Matching su parole chiave con confini esatti (\bword\b)
             if score == 0.0:
-                for kw in item.get("keywords", []):
-                    np_kw = normalize_italian(kw)
-                    if not np_kw:
-                        continue
-                    if np_kw in words:
+                for pat in self._compiled_keywords.get(sfx_id, []):
+                    m = pat.search(norm_text)
+                    if m:
                         score += 2.5
-                        matched_term = kw
+                        matched_term = m.group(0)
                         break
-                    elif len(np_kw) >= 5:
-                        stem = np_kw[:-1]
-                        if any(w.startswith(stem) for w in words if len(w) >= 5):
-                            score += 2.0
-                            matched_term = kw
-                            break
 
             if score >= 2.0:
                 scored_matches.append((score, sfx_id, matched_term))
@@ -724,32 +773,20 @@ class SFXManager:
         if not scored_matches:
             return []
 
+        # Ordina per punteggio e limita a massimo 2 effetti per battuta vocale
         scored_matches.sort(key=lambda x: x[0], reverse=True)
         selected = scored_matches[:2]
-        triggered_items: List[Dict[str, Any]] = []
+        triggered: List[Dict[str, Any]] = []
 
         for idx, (_sc, sfx_id, term) in enumerate(selected):
             item = lib[sfx_id]
-            triggered_items.append({"sfx": item, "term": term})
+            triggered.append({"sfx": item, "term": term})
             if idx == 0:
-                self.play_sfx(sfx_id, reason=f'Voce: "{term}"', library=lib)
+                self.play_sfx(sfx_id, reason=f'Voce: "{term}"')
             else:
                 threading.Timer(
                     0.65,
-                    lambda sid=sfx_id, trm=term: self.play_sfx(sid, reason=f'Voce: "{trm}"', library=lib),
+                    lambda sid=sfx_id, trm=term: self.play_sfx(sid, reason=f'Voce: "{trm}"'),
                 ).start()
 
-        return triggered_items
-
-    def shutdown(self) -> None:
-        try:
-            if self._stream is not None:
-                self._stream.stop()
-                self._stream.close()
-        except Exception:
-            pass
-        try:
-            if self._vlc_player is not None:
-                self._vlc_player.stop()
-        except Exception:
-            pass
+        return triggered

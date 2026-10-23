@@ -1,34 +1,60 @@
 """
-Configurazioni predefinite per Bardo AI - Assistente Musicale per Giochi di Ruolo.
-Ogni atmosfera include:
-- `tone_profile`: profilo ritmico/tonale ("fast_combat", "epic_boss", "dark_tense", "upbeat_tavern", "calm_rest", "exploration", "mystery", "city", "victory")
-- `seed_tracks`: brani certificati su YouTube Music scelti specificamente per il ritmo e il tono della scena (così non partono mai brani lenti in combattimento o fuori tema)
-- `phrases` e `keywords` in italiano ottimizzate senza sovrapposizioni ambigue.
+Configurazioni predefinite per Bardo AI v2.6.0 - Regia Musicale Automatica & Soundboard Vocale per GdR.
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
+
+__author__ = "Paolo Basta"
+
+APP_VERSION = "2.6.0"
+CONFIG_SCHEMA_VERSION = 2
 
 DEFAULT_CONFIG: Dict[str, Any] = {
+    "app_version": APP_VERSION,
+    "schema_version": CONFIG_SCHEMA_VERSION,
     "active_profile_id": "fantasy_dnd",
     "analyzer": {
         "mode": "hybrid",
         "cooldown_seconds": 18,
-        "confidence_threshold": 2.0,
+        "confidence_threshold": 2.2,
+        "min_scene_duration_seconds": 8.0,
+        "hysteresis_window_seconds": 25.0,
         "ai_provider": "gemini",
         "gemini_api_key": "",
-        "gemini_model": "gemini-2.0-flash",
+        "gemini_model": "gemini-2.5-flash",
         "ollama_url": "http://localhost:11434",
         "ollama_model": "llama3.2",
         "openai_api_key": "",
         "openai_base_url": "https://api.openai.com/v1",
         "openai_model": "gpt-4o-mini",
     },
+    "stt": {
+        "engine": "local",  # "local" (Silero VAD + Vosk + faster-whisper)
+        "vosk_enabled": True,
+        "whisper_enabled": True,
+        "whisper_model": "small",  # "tiny", "base", "small"
+        "vad_threshold": 0.45,
+    },
     "audio": {
         "master_volume": 75,
         "crossfade_seconds": 3.5,
-        "music_provider": "spotify",
-        "prefer_playlists": False,
-        "saved_playlists": [],
+        "music_provider": "ytmusic",
+        "cache_enabled": True,
+        "cache_max_mb": 500,
+        "auto_update_ytdlp": True,
+        "sponsorblock_enabled": True,
+        "prefer_user_playlist_over_biome": True,
+    },
+    "sfx": {
+        "volume": 80,
+        "voice_enabled": True,
+        "duck_music": True,
+        "custom_items": {},
+    },
+    "user_overrides": {
+        "deleted_profiles": [],
+        "deleted_moods": {},
     },
     "profiles": {
         "fantasy_dnd": {
@@ -67,12 +93,14 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                         "il pericolo e passato",
                         "continuate a esplorare",
                         "marciate per ore",
+                        "seguite la strada",
+                        "vi incamminate",
                     ],
                     "keywords": [
                         "viaggio", "viaggiare", "sentiero", "foresta", "bosco",
                         "montagna", "collina", "pianura", "fiume", "cavallo", "carro",
                         "orizzonte", "alba", "mattina", "esplorare", "esplorazione",
-                        "camminare", "camminate", "natura", "alberi", "mappa",
+                        "camminare", "camminate", "natura", "alberi", "mappa", "strada",
                     ],
                 },
                 "taverna": {
@@ -99,17 +127,21 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                     "phrases": [
                         "entrate nella locanda",
                         "entrate nella taverna",
+                        "benvenuto in taverna",
+                        "benvenuti nella locanda",
                         "oste portaci da bere",
                         "sedete al tavolo",
                         "odore di birra",
                         "musica di liuto",
                         "dentro la locanda",
                         "facciamo un brindisi",
+                        "fuoco del camino",
                     ],
                     "keywords": [
                         "taverna", "locanda", "oste", "locandiere", "birra", "idromele",
-                        "vino", "boccale", "bancone", "liuto", "bardo", "festa", "brindisi",
-                        "ubriaco", "stufato", "locandiera", "osteria",
+                        "vino", "boccale", "boccali", "bancone", "liuto", "bardo", "festa",
+                        "brindisi", "brindano", "brindare", "avventori", "avventore", "musici",
+                        "ubriaco", "ubriachi", "stufato", "locandiera", "osteria", "camino",
                     ],
                 },
                 "combattimento": {
@@ -118,7 +150,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                     "icon": "⚔️",
                     "color": "#ef4444",
                     "tone_profile": "fast_combat",
-                    "description": "100% Strumentale ad alto ritmo: scontri armati, imboscate, trappole mortali, fuoco e battaglie.",
+                    "description": "100% Strumentale ad alto ritmo: scontri armati, imboscate, trappole mortali e battaglie.",
                     "seed_tracks": [
                         {"videoId": "0udsdFv2YQA", "title": "Blood and Steel (Instrumental Combat)", "artist": "Jeremy Soule (Skyrim OST)", "duration": "2:11", "thumbnail": "https://i.ytimg.com/vi/0udsdFv2YQA/hqdefault.jpg"},
                         {"videoId": "X7PDqUbcgeU", "title": "Steel on Steel (Instrumental Combat)", "artist": "Jeremy Soule (Skyrim OST)", "duration": "1:43", "thumbnail": "https://i.ytimg.com/vi/X7PDqUbcgeU/hqdefault.jpg"},
@@ -151,6 +183,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                         "tira per colpire",
                         "tiro per colpire",
                         "quanti danni fai",
+                        "subisci danno",
+                        "subite danno",
+                        "punti danno",
                         "state bruciando",
                         "bruciando vivi",
                         "prendete fuoco",
@@ -163,12 +198,14 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                         "tiro salvezza",
                         "state morendo",
                     ],
+                    # NOTA: Rimosso "danno" isolato (che in italiano è anche "essi danno", es. "vi danno il benvenuto").
+                    # Usiamo "danni" plurale e le frasi "subisci danno", "punti danno", "fai danno".
                     "keywords": [
                         "iniziativa", "combattimento", "battaglia", "attacco", "attacca",
                         "attaccare", "colpisce", "colpire", "colpito", "spada", "pugnale", "ascia",
-                        "freccia", "arco", "scudo", "danni", "danno", "ferita", "ferite", "ferito",
+                        "freccia", "arco", "scudo", "danni", "ferita", "ferite", "ferito",
                         "sangue", "sanguina", "goblin", "orchi", "orco", "banditi", "imboscata",
-                        "schivare", "parare", "critico", "fendente", "carica", "nemico", "nemici",
+                        "schivare", "parare", "fendente", "nemico", "nemici",
                         "brucia", "bruciare", "bruciando", "bruciate", "bruciati", "rogo", "fiammata",
                         "esplosione", "esplode", "uccide", "uccidere", "ammazza", "morire", "morendo",
                         "artigli", "artigliata", "zanne", "morde", "sbrana", "massacro", "assalto",
@@ -247,6 +284,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                         "controllo trappole",
                         "tiro percezione nel buio",
                         "aprite il sarcofago",
+                        "scendete nel dungeon",
+                        "entrate nella cripta",
                     ],
                     "keywords": [
                         "dungeon", "cripta", "tomba", "catacombe", "sarcofago", "scheletro",
@@ -281,6 +320,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                         "bottega del fabbro",
                         "quartiere del porto",
                         "quante monete d oro",
+                        "costa dieci monete",
                     ],
                     "keywords": [
                         "citta", "villaggio", "mercato", "mercante", "bottega", "negozio",
@@ -329,7 +369,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                     "icon": "⛺",
                     "color": "#06b6d4",
                     "tone_profile": "calm_rest",
-                    "description": "Riposo lungo o breve, tende montate, bivacco tranquillo e sonno (100% strumentale).",
+                    "description": "Riposo lungo o breve, tende montate, bivacco tranquillo intorno al fuoco e sonno (100% strumentale).",
                     "seed_tracks": [
                         {"videoId": "LbNMvsSRThw", "title": "Kyne's Peace (Instrumental)", "artist": "Jeremy Soule (Skyrim OST)", "duration": "3:50", "thumbnail": "https://i.ytimg.com/vi/LbNMvsSRThw/hqdefault.jpg"},
                         {"videoId": "nG9s5mc_sts", "title": "I Want to Live (Camp Instrumental)", "artist": "Borislav Slavov (Baldur's Gate 3 OST)", "duration": "3:53", "thumbnail": "https://i.ytimg.com/vi/nG9s5mc_sts/hqdefault.jpg"},
@@ -350,15 +390,19 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                         "montate le tende",
                         "montiamo il campo",
                         "fuoco da campo",
+                        "intorno al fuoco",
+                        "accanto al fuoco",
+                        "vicino al fuoco",
+                        "davanti al fuoco",
+                        "scaldarsi al fuoco",
                         "intorno al falo",
+                        "accendete il falo",
                         "turni di guardia per la notte",
                         "vi accampate per la notte",
                         "ci accampiamo",
                         "andiamo a dormire",
                         "andate a dormire",
                     ],
-                    # NOTA: Rimosse parole ambigue come "fuoco", "ferite", "curare", "guardia", "campo", "notte"
-                    # per impedire qualsiasi attivazione errata durante incendi, ferite o combattimenti!
                     "keywords": [
                         "accampamento", "accamparsi", "accampate", "tenda", "tende", "falo",
                         "riposo", "riposare", "riposate", "dormire", "dormite", "addormentate",
@@ -403,7 +447,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         },
         "horror_cthulhu": {
             "id": "horror_cthulhu",
-            "name": "Horror & Investigativo",
+            "name": "Horror & Call of Cthulhu",
             "icon": "🐙",
             "description": "Atmosfere cupe per Il Richiamo di Cthulhu, Vampiri, Delta Green e sessioni horror.",
             "default_mood": "indagine",
@@ -568,6 +612,33 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                         "chiudere", "barricare", "finestra", "veloce", "fiato", "battito",
                     ],
                 },
+                "rifugio": {
+                    "id": "rifugio",
+                    "name": "Rifugio Sicuro",
+                    "icon": "🛋️",
+                    "color": "#10b981",
+                    "tone_profile": "calm_rest",
+                    "description": "Ritorno in hotel o nello studio, cure mediche, tregua momentanea dall'orrore (100% strumentale).",
+                    "seed_tracks": [
+                        {"videoId": "LbNMvsSRThw", "title": "Kyne's Peace (Instrumental)", "artist": "Jeremy Soule", "duration": "3:50", "thumbnail": "https://i.ytimg.com/vi/LbNMvsSRThw/hqdefault.jpg"},
+                        {"videoId": "SXD8qmiIjZw", "title": "Restful Sleep (Instrumental)", "artist": "Derek Fiechter", "duration": "3:35", "thumbnail": "https://i.ytimg.com/vi/SXD8qmiIjZw/hqdefault.jpg"},
+                    ],
+                    "queries": [
+                        "calm vintage piano rain safe room ambient instrumental",
+                        "resident evil save room theme style ambient instrumental",
+                    ],
+                    "custom_playlist": "",
+                    "pinned_tracks": [],
+                    "phrases": [
+                        "siete al sicuro",
+                        "tornate in albergo",
+                        "chiudete la porta a chiave",
+                        "riposate per la notte",
+                    ],
+                    "keywords": [
+                        "rifugio", "sicuro", "albergo", "locanda", "riposo", "calma", "tregua", "ospedale",
+                    ],
+                },
             },
         },
         "scifi_cyberpunk": {
@@ -728,12 +799,180 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                         "stazione spaziale",
                     ],
                     "keywords": [
-                        "spazio", "astronave", "nave", "orbita", "pianeta", "stella",
+                        "spazio", "astronave", "orbita", "pianeta", "stella",
                         "galassia", "iperspazio", "gravita", "vuoto", "stazione",
                         "radar", "sensori", "alieno", "relitto", "equipaggio",
                     ],
                 },
             },
         },
+        "giallo_investigativo": {
+            "id": "giallo_investigativo",
+            "name": "Giallo & Investigativo",
+            "icon": "🔍",
+            "description": "Thriller polizieschi, misteri alla Sherlock Holmes / Agatha Christie, interrogatori e deduzioni.",
+            "default_mood": "scena_crimine",
+            "moods": {
+                "scena_crimine": {
+                    "id": "scena_crimine",
+                    "name": "Scena del Crimine",
+                    "icon": "🔍",
+                    "color": "#0284c7",
+                    "tone_profile": "mystery",
+                    "description": "Analisi scientifica delle prove, rilievi forensi, mistero iniziale (100% strumentale).",
+                    "seed_tracks": [
+                        {"videoId": "CNf6BL8gwbw", "title": "Something's Not Right (Suspense Instrumental)", "artist": "Lucas Quinn Creations", "duration": "3:12", "thumbnail": "https://i.ytimg.com/vi/CNf6BL8gwbw/hqdefault.jpg"},
+                        {"videoId": "VPgZFgOvJDE", "title": "Secunda (Mystery Instrumental)", "artist": "Jeremy Soule", "duration": "2:04", "thumbnail": "https://i.ytimg.com/vi/VPgZFgOvJDE/hqdefault.jpg"},
+                    ],
+                    "queries": [
+                        "crime scene investigation mystery soundtrack instrumental",
+                        "sherlock holmes detective violin piano mystery instrumental",
+                        "noir detective investigation ambient instrumental",
+                    ],
+                    "custom_playlist": "",
+                    "pinned_tracks": [],
+                    "phrases": [
+                        "scena del crimine",
+                        "esaminate il cadavere",
+                        "impronte digitali",
+                        "macchia di sangue sul tappeto",
+                        "arma del delitto",
+                    ],
+                    "keywords": [
+                        "crimine", "delitto", "omicidio", "vittima", "impronte", "prove",
+                        "indizio", "indizi", "forense", "autopsia", "cadavere", "ispettore", "commissario",
+                    ],
+                },
+                "interrogatorio": {
+                    "id": "interrogatorio",
+                    "name": "Interrogatorio & Sospetti",
+                    "icon": "🪑",
+                    "color": "#f59e0b",
+                    "tone_profile": "dark_tense",
+                    "description": "Pressione psicologica, bugie, alibi da smontare e sguardi tesi (100% strumentale).",
+                    "seed_tracks": [
+                        {"videoId": "jm09uMSTgro", "title": "Shadows, Curse and Death (Tension Instrumental)", "artist": "Borislav Slavov", "duration": "3:45", "thumbnail": "https://i.ytimg.com/vi/jm09uMSTgro/hqdefault.jpg"},
+                        {"videoId": "1gryP9yJm7U", "title": "Explore the Ruins (Suspense Instrumental)", "artist": "Stuart Chatwood", "duration": "8:52", "thumbnail": "https://i.ytimg.com/vi/1gryP9yJm7U/hqdefault.jpg"},
+                    ],
+                    "queries": [
+                        "interrogation room suspense tension soundtrack instrumental",
+                        "psychological thriller tense ambient music instrumental",
+                    ],
+                    "custom_playlist": "",
+                    "pinned_tracks": [],
+                    "phrases": [
+                        "sala interrogatori",
+                        "sta mentendo",
+                        "qual e il suo alibi",
+                        "interrogate il sospettato",
+                        "tiro di intuizione",
+                    ],
+                    "keywords": [
+                        "interrogatorio", "interrogare", "sospettato", "sospetto", "alibi",
+                        "testimone", "mentire", "bugia", "confessione", "movente", "colpevole",
+                    ],
+                },
+                "deduzione": {
+                    "id": "deduzione",
+                    "name": "Deduzione & Archivio",
+                    "icon": "🧩",
+                    "color": "#8b5cf6",
+                    "tone_profile": "exploration",
+                    "description": "Collegare i fili sulla lavagna, ricerche in archivio, ragionamento logico (100% strumentale).",
+                    "seed_tracks": [
+                        {"videoId": "KGsjpcUT9ho", "title": "Masser (Thinking Instrumental)", "artist": "Jeremy Soule", "duration": "6:05", "thumbnail": "https://i.ytimg.com/vi/KGsjpcUT9ho/hqdefault.jpg"},
+                        {"videoId": "ECYLHiXvrBQ", "title": "Blade Runner Blues (Noir Instrumental)", "artist": "Vangelis", "duration": "8:55", "thumbnail": "https://i.ytimg.com/vi/ECYLHiXvrBQ/hqdefault.jpg"},
+                    ],
+                    "queries": [
+                        "detective deduction thinking piano cello soundtrack instrumental",
+                        "dark academia library study mystery instrumental",
+                    ],
+                    "custom_playlist": "",
+                    "pinned_tracks": [],
+                    "phrases": [
+                        "collegate gli indizi",
+                        "lavagna delle prove",
+                        "tutto torna",
+                        "ricerca in archivio",
+                    ],
+                    "keywords": [
+                        "deduzione", "teoria", "archivio", "dossier", "fascicolo",
+                        "giornale", "biblioteca", "mappa", "ragionamento", "ipotesi", "puzzle", "prove", "indizi",
+                    ],
+                },
+                "inseguimento_poliziesco": {
+                    "id": "inseguimento_poliziesco",
+                    "name": "Inseguimento & Azione",
+                    "icon": "🚨",
+                    "color": "#ef4444",
+                    "tone_profile": "fast_combat",
+                    "description": "Il sospettato scappa sui tetti, sparatoria o scontro corpo a corpo (100% strumentale).",
+                    "seed_tracks": [
+                        {"videoId": "uIyb0N4O1go", "title": "Nine Blades (Fast Action Instrumental)", "artist": "Borislav Slavov", "duration": "4:50", "thumbnail": "https://i.ytimg.com/vi/uIyb0N4O1go/hqdefault.jpg"},
+                        {"videoId": "EegPbRtmzXY", "title": "The Rebel Path (Chase Instrumental)", "artist": "P.T. Adamczyk", "duration": "4:11", "thumbnail": "https://i.ytimg.com/vi/EegPbRtmzXY/hqdefault.jpg"},
+                    ],
+                    "queries": [
+                        "police chase action thriller percussive soundtrack instrumental",
+                        "rooftop chase intense ost instrumental",
+                    ],
+                    "custom_playlist": "",
+                    "pinned_tracks": [],
+                    "phrases": [
+                        "scappa dalla finestra",
+                        "inseguitelo subito",
+                        "fermo polizia",
+                        "estrae una pistola",
+                        "tirate iniziativa",
+                    ],
+                    "keywords": [
+                        "inseguimento", "insegue", "fuggitivo", "fuga", "scappa", "scappare",
+                        "fugge", "pistola", "sparo", "sparatoria", "combattimento", "aggressione", "trappola",
+                    ],
+                },
+                "rivelazione": {
+                    "id": "rivelazione",
+                    "name": "Caso Risolto & Verità",
+                    "icon": "⚖️",
+                    "color": "#eab308",
+                    "tone_profile": "victory",
+                    "description": "Smacheramento finale dell'assassino, caso risolto, giustizia fatta (100% strumentale).",
+                    "seed_tracks": [
+                        {"videoId": "tsJJQKYguhw", "title": "Forging the Fate (Resolution Instrumental)", "artist": "Borislav Slavov", "duration": "2:12", "thumbnail": "https://i.ytimg.com/vi/tsJJQKYguhw/hqdefault.jpg"},
+                        {"videoId": "3sE1rKAUNtg", "title": "Arrival to Earth (Finale Instrumental)", "artist": "Steve Jablonsky", "duration": "5:27", "thumbnail": "https://i.ytimg.com/vi/3sE1rKAUNtg/hqdefault.jpg"},
+                    ],
+                    "queries": [
+                        "mystery solved dramatic revelation orchestral soundtrack instrumental",
+                        "detective finale truth revealed soundtrack instrumental",
+                    ],
+                    "custom_playlist": "",
+                    "pinned_tracks": [],
+                    "phrases": [
+                        "il colpevole e",
+                        "l assassino e",
+                        "caso risolto",
+                        "avete risolto il caso",
+                        "confessa tutto",
+                    ],
+                    "keywords": [
+                        "risolto", "verita", "giustizia", "arresto", "arrestato", "manette", "vittoria",
+                    ],
+                },
+            },
+        },
     },
 }
+
+
+def list_available_profiles(cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Restituisce l'elenco di tutti i profili presenti nella configurazione."""
+    profiles = cfg.get("profiles", {})
+    return list(profiles.values()) if isinstance(profiles, dict) else []
+
+
+def get_profile_by_id(cfg: Dict[str, Any], profile_id: str) -> Optional[Dict[str, Any]]:
+    """Restituisce il profilo specificato o None."""
+    profiles = cfg.get("profiles", {})
+    if isinstance(profiles, dict):
+        return profiles.get(profile_id)
+    return None
+

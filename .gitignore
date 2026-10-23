@@ -18,3 +18,14 @@ data/
 
 # Cache temporanea generazione SFX
 sfx/_raw_cache/
+
+# Documenti di analisi interna privata e note
+bastaaaa.md
+*.log
+.pytest_cache/
+.env
+*.env
+.vscode/
+.idea/
+*.tmp
+*.bak

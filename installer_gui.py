@@ -23,8 +23,8 @@ import customtkinter as ctk
 
 
 APP_NAME = "Bardo AI"
-APP_VERSION = "2.5.0"
-APP_PUBLISHER = "Bardo AI GdR"
+APP_VERSION = "2.6.0"
+APP_PUBLISHER = "Paolo Basta"
 EXE_NAME = "BardoAI.exe"
 REQUIRED_SPACE_MB = 260
 
@@ -82,16 +82,37 @@ def get_free_space_gb(target_dir: Path) -> Tuple[float, str]:
         return 0.0, "Disco"
 
 
+def get_user_desktop_dir() -> Path:
+    """Restituisce il percorso reale del Desktop dell'utente, gestendo anche OneDrive e percorsi reindirizzati."""
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders") as k:
+            val, _ = winreg.QueryValueEx(k, "Desktop")
+            expanded = os.path.expandvars(val)
+            if Path(expanded).is_dir():
+                return Path(expanded)
+    except Exception:
+        pass
+    home = Path.home()
+    if (home / "OneDrive" / "Desktop").is_dir():
+        return home / "OneDrive" / "Desktop"
+    return home / "Desktop"
+
+
 def create_windows_shortcut(target_path: Path, shortcut_path: Path, icon_path: Path, description: str) -> None:
-    """Crea un collegamento .lnk su Windows tramite WScript.Shell."""
+    """Crea un collegamento .lnk su Windows gestendo correttamente caratteri speciali e apostrofi (risolve bug #21)."""
     shortcut_path.parent.mkdir(parents=True, exist_ok=True)
+    esc_sc = str(shortcut_path).replace("'", "''")
+    esc_target = str(target_path).replace("'", "''")
+    esc_work = str(target_path.parent).replace("'", "''")
+    esc_icon = str(icon_path).replace("'", "''")
+    esc_desc = str(description).replace("'", "''")
     ps_script = (
         "$ws = New-Object -ComObject WScript.Shell; "
-        f"$s = $ws.CreateShortcut('{str(shortcut_path)}'); "
-        f"$s.TargetPath = '{str(target_path)}'; "
-        f"$s.WorkingDirectory = '{str(target_path.parent)}'; "
-        f"$s.IconLocation = '{str(icon_path)},0'; "
-        f"$s.Description = '{description}'; "
+        f"$s = $ws.CreateShortcut('{esc_sc}'); "
+        f"$s.TargetPath = '{esc_target}'; "
+        f"$s.WorkingDirectory = '{esc_work}'; "
+        f"$s.IconLocation = '{esc_icon},0'; "
+        f"$s.Description = '{esc_desc}'; "
         "$s.Save()"
     )
     subprocess.run(
@@ -120,8 +141,8 @@ def register_uninstaller(install_dir: Path, uninstaller_bat: Path, icon_path: Pa
 
 
 def write_uninstaller_script(install_dir: Path) -> Path:
-    """Crea uno script di disinstallazione pulita nella cartella scelta dall'utente."""
-    desktop_lnk = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Desktop" / "Bardo AI.lnk"
+    """Crea uno script di disinstallazione sicuro che elimina solo i file di Bardo AI (risolve bug #18)."""
+    desktop_lnk = get_user_desktop_dir() / "Bardo AI.lnk"
     start_menu_dir = (
         Path(os.environ.get("APPDATA", str(Path.home() / "AppData" / "Roaming")))
         / "Microsoft"
@@ -134,6 +155,7 @@ def write_uninstaller_script(install_dir: Path) -> Path:
     bat_content = f"""@echo off
 chcp 65001 >nul
 title Disinstallazione di Bardo AI
+
 echo Arresto di eventuali istanze di Bardo AI in esecuzione...
 taskkill /F /IM BardoAI.exe >nul 2>&1
 timeout /t 1 /nobreak >nul
@@ -145,10 +167,16 @@ if exist "{start_menu_dir}" rmdir /S /Q "{start_menu_dir}"
 echo Rimozione voce dal registro di Windows...
 reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\BardoAI" /f >nul 2>&1
 
-echo Rimozione file di Bardo AI da "{install_dir}"...
+echo Rimozione file dell'applicazione...
+if exist "%~dp0BardoAI.exe" del /F /Q "%~dp0BardoAI.exe"
+if exist "%~dp0bardo_icon.ico" del /F /Q "%~dp0bardo_icon.ico"
+if exist "%~dp0LEGGIMI.txt" del /F /Q "%~dp0LEGGIMI.txt"
+if exist "%~dp0sfx" rmdir /S /Q "%~dp0sfx"
+
+echo Rimozione directory Bardo AI se vuota...
 cd /d "%TEMP%"
-start /b "" cmd /c "timeout /t 2 /nobreak >nul & rmdir /S /Q \\"{install_dir}\\""
-echo Disinstallazione completata!
+start /b "" cmd /c "timeout /t 2 /nobreak >nul & if exist \\"{install_dir}\\BardoAI.exe\\" (rem) else (rmdir \\"{install_dir}\\" >nul 2>&1)"
+echo Disinstallazione completata con successo!
 exit
 """
     bat_path.write_text(bat_content, encoding="utf-8")
@@ -556,14 +584,15 @@ class BardoInstallerWizard(ctk.CTk):
             self.after(0, lambda: self._on_install_success(exe_path))
 
         except Exception as e:
+            err_text = str(e)
             self._installing = False
             self.after(
                 0,
-                lambda: (
+                lambda msg=err_text: (
                     self.btn_install.configure(state="normal", text="🚀 Installa Bardo AI"),
                     self.btn_browse.configure(state="normal"),
                     self.entry_dir.configure(state="normal"),
-                    messagebox.showerror("Errore durante l'installazione", f"Si è verificato un errore:\n{e}"),
+                    messagebox.showerror("Errore durante l'installazione", f"Si è verificato un errore:\n{msg}"),
                 ),
             )
 
