@@ -19,8 +19,12 @@ data/
 # Cache temporanea generazione SFX
 sfx/_raw_cache/
 
-# Documenti di analisi interna privata e note
+# Documenti di analisi interna privata, istruzioni AI e note
 bastaaaa.md
+GEMINI.md
+AGENTS.md
+.agents/
+.gemini/
 *.log
 .pytest_cache/
 .env
