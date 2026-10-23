@@ -23,7 +23,7 @@ import customtkinter as ctk
 
 
 APP_NAME = "Bardo AI"
-APP_VERSION = "2.6.0"
+APP_VERSION = "2.6.1"
 APP_PUBLISHER = "Paolo Basta"
 EXE_NAME = "BardoAI.exe"
 REQUIRED_SPACE_MB = 260

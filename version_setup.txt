@@ -1,8 +1,8 @@
 # UTF-8
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(2, 6, 0, 0),
-    prodvers=(2, 6, 0, 0),
+    filevers=(2, 6, 1, 0),
+    prodvers=(2, 6, 1, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -17,12 +17,12 @@ VSVersionInfo(
         '040904B0',
         [StringStruct('CompanyName', 'Paolo Basta'),
         StringStruct('FileDescription', 'Bardo AI Setup — Installer Ufficiale Windows'),
-        StringStruct('FileVersion', '2.6.0.0'),
+        StringStruct('FileVersion', '2.6.1.0'),
         StringStruct('InternalName', 'BardoAI_Setup'),
         StringStruct('LegalCopyright', 'Copyright (c) 2026 Paolo Basta. All rights reserved.'),
         StringStruct('OriginalFilename', 'BardoAI_Setup.exe'),
         StringStruct('ProductName', 'Bardo AI Setup'),
-        StringStruct('ProductVersion', '2.6.0.0'),
+        StringStruct('ProductVersion', '2.6.1.0'),
         StringStruct('Author', 'Paolo Basta'),
         StringStruct('Comments', 'Installer guidato per Bardo AI.')])
       ]), 

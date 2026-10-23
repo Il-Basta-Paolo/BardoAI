@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/Il-Basta-Paolo/BardoAI/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/Il-Basta-Paolo/BardoAI/actions/workflows/tests.yml)
 [![Release](https://img.shields.io/github/v/release/Il-Basta-Paolo/BardoAI?color=10b981&label=Release)](https://github.com/Il-Basta-Paolo/BardoAI/releases/latest)
-[![Changelog](https://img.shields.io/badge/Changelog-v2.6.0-blue)](CHANGELOG.md)
+[![Changelog](https://img.shields.io/badge/Changelog-v2.6.1-blue)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 
 **Regia musicale automatica ed effetti sonori vocali per sessioni GdR**
@@ -12,7 +12,7 @@ Quando fai il Dungeon Master al tavolo o su Discord, gestire la colonna sonora �
 **Bardo AI** risolve questo problema: ascolta la tua voce mentre narri in italiano, capisce cosa sta succedendo al tavolo e adatta la musica e gli effetti sonori in tempo reale, senza che tu debba toccare il mouse.
 
 <p align="center">
-  <img src="docs/screenshots/bardo_ui.png" alt="Interfaccia Desktop di Bardo AI v2.6.0" width="850"/>
+  <img src="docs/screenshots/bardo_ui.png" alt="Interfaccia Desktop di Bardo AI v2.6.1" width="850"/>
 </p>
 
 ---
@@ -39,9 +39,13 @@ Quando fai il Dungeon Master al tavolo o su Discord, gestire la colonna sonora �
 
 ---
 
-## Novità dell'ultima versione (v2.6.0)
+## Novità dell'ultima versione (v2.6.1)
 
-Con la versione 2.6.0 il progetto è stato completamente rifondato su un'architettura desktop nativa, eliminando la vecchia interfaccia web locale:
+- **Sincronizzazione perfetta tra selettore profilo e griglia atmosfere all'avvio**: risolta l'anomalia per cui aprendo l'app il menu a tendina mostrava "Fantasy & D&D" mentre la griglia delle atmosfere sottostante mostrava quelle di Cyberpunk (o dell'ultimo profilo salvato). Ora all'avvio il selettore riflette fedelmente il profilo attivo memorizzato, e qualsiasi cambio (manuale o da codice) mantiene i componenti in perfetto allineamento bidirezionale senza conflitti di segnali.
+- **Suite di collaudo dedicata per la UI**: introdotti test unitari offscreen in `tests/test_ui_profile_sync.py` per verificare l'allineamento automatico dei profili su macchina vergine e prevenire regressioni visive.
+
+<details>
+<summary><b>Visualizza le novità della release precedente (v2.6.0)</b></summary>
 
 - **Interfaccia desktop nativa in PySide6 (Qt6)**: addio al browser e al server web locale. L'applicazione è ora un programma desktop Windows nativo, fluido, con supporto High-DPI e tema dark curato.
 - **Motore audio interno (sounddevice + PyAV)**: rimosso LibVLC e le relative DLL esterne. Ora un unico mixer leggero gestisce la decodifica audio interna a 48kHz stereo, le dissolvenze incrociate naturali e l'audio ducking (la musica di sottofondo si attenua automaticamente all'attivazione degli effetti sonori).
@@ -51,6 +55,7 @@ Con la versione 2.6.0 il progetto è stato completamente rifondato su un'archite
 - **Sicurezza e archiviazione credenziali**: rimossa ogni archiviazione in chiaro di token e cookie nei file JSON. Le chiavi opzionali (Gemini, Spotify, OpenAI) vengono salvate in modo cifrato nel Credential Manager di Windows tramite `keyring`.
 - **4 Profili di campagna completi**: ambientazioni preconfigurate (Fantasy/D&D, Horror/Cthulhu, Sci-Fi/Cyberpunk, Giallo/Investigativo) con catalogo musicale e parole chiave dedicate.
 - **Eseguibili ufficiali e installer guidato**: disponibili sia la versione standalone portatile (`BardoAI.exe`) sia il setup Windows (`BardoAI_Setup.exe`) con metadati e scorciatoie di sistema.
+</details>
 
 > Consulta il file [`CHANGELOG.md`](CHANGELOG.md) per l'archivio completo e storico di tutti i cambiamenti.
 

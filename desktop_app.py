@@ -1,5 +1,5 @@
 """
-Bardo AI v2.6.0 — Regia Musicale Intelligente & Soundboard Vocale per Sessioni GdR.
+Bardo AI v2.6.1 — Regia Musicale Intelligente & Soundboard Vocale per Sessioni GdR.
 Entry point desktop PySide6.
 Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
@@ -10,7 +10,7 @@ import os
 import sys
 
 __author__ = "Paolo Basta"
-__version__ = "2.6.0"
+__version__ = "2.6.1"
 
 # Abilita rendering High DPI per schermi 4K e display moderni su Windows
 os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
@@ -30,7 +30,7 @@ def main() -> None:
 
     app = QApplication(sys.argv)
     app.setApplicationName("Bardo AI")
-    app.setApplicationVersion("2.6.0")
+    app.setApplicationVersion("2.6.1")
     app.setOrganizationName("Paolo Basta")
     app.setOrganizationDomain("github.com/Il-Basta-Paolo/BardoAI")
 

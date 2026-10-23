@@ -1,5 +1,5 @@
 """
-Script di generazione dell'eseguibile e dell'installer distribuibile di Bardo AI v2.6.0:
+Script di generazione dell'eseguibile e dell'installer distribuibile di Bardo AI v2.6.1:
 Autore: Paolo Basta
 1. Verifica/compila `BardoAI.exe` tramite PyInstaller e `BardoAI.spec` (PySide6, PyAV, Zero VLC).
 2. Crea l'archivio payload compresso con `BardoAI.exe`, `sfx/*.wav`, `bardo_icon.ico` e `LEGGIMI.txt`.

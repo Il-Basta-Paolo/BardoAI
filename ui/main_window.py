@@ -1,7 +1,8 @@
 """
-Finestra Principale di Bardo AI v2.6.0 (MainWindow) in PySide6.
+Finestra Principale di Bardo AI v2.6.1 (MainWindow) in PySide6.
 Collega l'interfaccia grafica modulare con il Director, l'AudioEngine,
 il MusicService, il ContinuousVoiceListener e l'SFXManager.
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
 
 from __future__ import annotations
@@ -57,7 +58,7 @@ class EventBridge(QObject):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Bardo AI v2.6.0 — Regia Musicale Intelligente & Soundboard GdR")
+        self.setWindowTitle("Bardo AI v2.6.1 — Regia Musicale Intelligente & Soundboard GdR")
         self.resize(1120, 800)
         self.setMinimumSize(960, 680)
 
@@ -145,7 +146,7 @@ class MainWindow(QMainWindow):
 
         lbl_app = QLabel("BARDO AI")
         lbl_app.setObjectName("headerTitle")
-        lbl_v2 = QLabel("v2.6.0")
+        lbl_v2 = QLabel("v2.6.1")
         lbl_v2.setStyleSheet("font-size: 11px; background-color: #3b82f6; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold;")
         top_bar.addWidget(lbl_app)
         top_bar.addWidget(lbl_v2)
@@ -157,6 +158,12 @@ class MainWindow(QMainWindow):
         profiles = list_available_profiles(self.config)
         for p in profiles:
             self.combo_profile.addItem(f"{p.get('icon', '🎭')} {p.get('name', p['id'])}", p["id"])
+
+        # Sincronizza l'indice iniziale del selettore con il profilo attivo salvato
+        init_idx = self.combo_profile.findData(self.active_profile_id)
+        if init_idx >= 0:
+            self.combo_profile.setCurrentIndex(init_idx)
+
         top_bar.addWidget(self.combo_profile)
         top_bar.addStretch()
 
@@ -354,6 +361,14 @@ class MainWindow(QMainWindow):
         self.active_profile_id = profile_id
         self.config["active_profile_id"] = profile_id
         ConfigManager.save(self.config)
+
+        # Sincronizza il selettore a tendina se non allineato (senza generare rimbalzi di segnali)
+        if hasattr(self, "combo_profile"):
+            idx = self.combo_profile.findData(profile_id)
+            if idx >= 0 and self.combo_profile.currentIndex() != idx:
+                self.combo_profile.blockSignals(True)
+                self.combo_profile.setCurrentIndex(idx)
+                self.combo_profile.blockSignals(False)
 
         self.director.reset()
         profile = self.config["profiles"].get(profile_id, {})

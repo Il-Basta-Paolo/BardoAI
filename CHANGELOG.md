@@ -6,6 +6,17 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
+## [2.6.1] — 2026-10-24
+
+### 🐛 Risolto
+- **Disallineamento Profilo / Griglia Atmosfere all'Avvio**: risolta l'anomalia per cui all'avvio dell'applicazione il menu a tendina superiore mostrava "Fantasy & D&D" mentre la griglia delle atmosfere sottostante mostrava quelle di Cyberpunk (o dell'ultimo profilo memorizzato). Ora l'indice del menu a tendina viene sincronizzato immediatamente all'avvio con il profilo salvato in configurazione (`active_profile_id`).
+- **Sincronizzazione Bidirezionale Sicura**: implementato allineamento atomico con blocco preventivo dei segnali (`blockSignals(True/False)`) in `_apply_profile`, prevenendo loop ricorsivi di cambio profilo o mancata emissione di eventi Qt.
+
+### 🌟 Aggiunto
+- **Suite di Test UI Offscreen**: aggiunti nuovi test unitari in `tests/test_ui_profile_sync.py` per collaudare l'avvio, il cambio profilo manuale da combobox e l'allineamento programmatico su macchina vergine offscreen.
+
+---
+
 ## [2.6.0] — 2026-10-24
 
 ### 🌟 Aggiunto
