@@ -30,6 +30,21 @@ Quando fai il Dungeon Master al tavolo o su Discord, gestire la colonna sonora �
 
 ---
 
+## Novità dell'ultima versione (v2.6.0)
+
+Con la versione 2.6.0 il progetto è stato completamente rifondato su un'architettura desktop nativa, eliminando la vecchia interfaccia web locale:
+
+- **Interfaccia desktop nativa in PySide6 (Qt6)**: addio al browser e al server web locale. L'applicazione è ora un programma desktop Windows nativo, fluido, con supporto High-DPI e tema dark curato.
+- **Motore audio interno (sounddevice + PyAV)**: rimosso LibVLC e le relative DLL esterne. Ora un unico mixer leggero gestisce la decodifica audio interna a 48kHz stereo, le dissolvenze incrociate naturali e l'audio ducking (la musica di sottofondo si attenua automaticamente all'attivazione degli effetti sonori).
+- **Riconoscimento vocale 100% offline**: pipeline combinata con Vosk (latenza ~150ms per l'attivazione immediata degli effetti pronunciati a voce) e Faster-Whisper per la regia d'atmosfera. Zero invio di registrazioni vocali all'esterno, zero costi di API.
+- **Parsing semantico con gestione delle negazioni**: il motore analizza clausola per clausola la narrazione del Master; frasi come *"non ci sono mostri"* o *"non estraete le spade"* non attivano più erroneamente combattimenti o effetti.
+- **Disambiguazione lessicale italiana**: rimossi tutti i falsi positivi su omografi comuni come *"vi danno il benvenuto"* (verbo dare, non danno subito), *"intorno al fuoco"* (bivacco accogliente), *"costa dieci monete"* (prezzo, non mare).
+- **Sicurezza e archiviazione credenziali**: rimossa ogni archiviazione in chiaro di token e cookie nei file JSON. Le chiavi opzionali (Gemini, Spotify, OpenAI) vengono salvate in modo cifrato nel Credential Manager di Windows tramite `keyring`.
+- **4 Profili di campagna completi**: ambientazioni preconfigurate (Fantasy/D&D, Horror/Cthulhu, Sci-Fi/Cyberpunk, Giallo/Investigativo) con catalogo musicale e parole chiave dedicate.
+- **Eseguibili ufficiali e installer guidato**: disponibili sia la versione standalone portatile (`BardoAI.exe`) sia il setup Windows (`BardoAI_Setup.exe`) con metadati e scorciatoie di sistema.
+
+---
+
 ## Come iniziare
 
 ### Opzione 1: Eseguibile pronto all'uso (Windows)
