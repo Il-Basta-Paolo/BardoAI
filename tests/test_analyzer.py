@@ -92,3 +92,11 @@ def test_danger_veto_rule():
     safe_text = "Non c'è nessun pericolo e nessun nemico, siamo completamente al sicuro"
     res_safe = analyzer.analyze_quick(safe_text, profile_id="fantasy_dnd")
     assert res_safe.mood not in ("combattimento", "boss")
+
+
+def test_analyze_quick_with_dict_profile():
+    from config_defaults import DEFAULT_CONFIG
+    analyzer = SceneAnalyzer()
+    profile_dict = DEFAULT_CONFIG["profiles"]["fantasy_dnd"]
+    res = analyzer.analyze_quick("I goblin scoccano le loro frecce!", profile_id=profile_dict)
+    assert res.mood in ("combattimento", "tensione")

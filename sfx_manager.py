@@ -584,6 +584,12 @@ class SFXManager:
         cand_bundled = self.bundled_dir / filename
         if cand_bundled.is_file():
             return cand_bundled
+        cand_exe = Path(sys.executable).parent / "sfx" / filename
+        if cand_exe.is_file():
+            return cand_exe
+        cand_src = Path(__file__).resolve().parent / "sfx" / filename
+        if cand_src.is_file():
+            return cand_src
         cand_abs = Path(filename)
         if cand_abs.is_file():
             return cand_abs

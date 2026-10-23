@@ -1,5 +1,6 @@
-# Bardo AI v2.0 Dependencies
+# Bardo AI v2.6.0 Dependencies
 PySide6>=6.6.0
+customtkinter>=5.2.0
 av>=11.0.0
 sounddevice>=0.4.6
 numpy>=1.24.0

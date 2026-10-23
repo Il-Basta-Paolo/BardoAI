@@ -6,6 +6,7 @@ il MusicService, il ContinuousVoiceListener e l'SFXManager.
 
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from pathlib import Path
@@ -61,9 +62,14 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(960, 680)
 
         # Icona
-        icon_path = Path(__file__).resolve().parent.parent / "bardo_icon.ico"
-        if icon_path.is_file():
-            self.setWindowIcon(QIcon(str(icon_path)))
+        for cand in [
+            Path(getattr(sys, "_MEIPASS", "")) / "bardo_icon.ico",
+            Path(__file__).resolve().parent.parent / "bardo_icon.ico",
+            Path(sys.executable).parent / "bardo_icon.ico",
+        ]:
+            if cand.is_file():
+                self.setWindowIcon(QIcon(str(cand)))
+                break
 
         self.setStyleSheet(DARK_THEME_QSS)
 

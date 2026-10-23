@@ -1237,11 +1237,14 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido:
 
         return kw_result
 
-    def analyze_quick(self, raw_text: str, profile_id: str = "fantasy_dnd") -> "AnalysisResult":
+    def analyze_quick(self, raw_text: str, profile_id: Any = "fantasy_dnd") -> "AnalysisResult":
         """Analisi sincrona ad alta velocità basata su regole/keyword, ideale per unit test e verifiche rapide."""
-        from config_defaults import DEFAULT_CONFIG
-        profiles = DEFAULT_CONFIG["profiles"]
-        profile = profiles.get(profile_id) or profiles.get("fantasy_dnd") or next(iter(profiles.values()))
+        if isinstance(profile_id, dict):
+            profile = profile_id
+        else:
+            from config_defaults import DEFAULT_CONFIG
+            profiles = DEFAULT_CONFIG["profiles"]
+            profile = profiles.get(profile_id) or profiles.get("fantasy_dnd") or next(iter(profiles.values()))
         res = self.analyze_keywords(raw_text, profile)
         return AnalysisResult(res)
 

@@ -15,6 +15,7 @@ __version__ = "2.6.0"
 # Abilita rendering High DPI per schermi 4K e display moderni su Windows
 os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication

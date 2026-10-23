@@ -195,10 +195,22 @@ class AudioEngine:
                 callback=self._callback,
             )
             self._stream.start()
+            self.last_error = None
         except Exception as e:
             self.last_error = f"Impossibile aprire l'uscita audio: {e}"
             self._stream = None
             print(f"[AudioEngine] {self.last_error}")
+
+    def ensure_stream(self) -> bool:
+        """Assicura che lo stream di output audio sia attivo, tentando la riapertura se necessario."""
+        if self._stream is not None:
+            try:
+                if self._stream.active:
+                    return True
+            except Exception:
+                pass
+        self._start_stream()
+        return self._stream is not None
 
     def _callback(self, outdata: np.ndarray, frames: int, _t: Any, _status: Any) -> None:
         mix = np.zeros((frames, CHANNELS), dtype=np.float32)
@@ -271,6 +283,7 @@ class AudioEngine:
 
     # ================================================================ SFX
     def play_sfx_array(self, arr: np.ndarray, trim: float = 1.0) -> float:
+        self.ensure_stream()
         with self._lock:
             if len(self._sfx_voices) >= 12:  # polifonia limitata per non saturare
                 self._sfx_voices.pop(0)
@@ -285,6 +298,7 @@ class AudioEngine:
         Avvia `source` sul deck inattivo e fa il crossfade S-curve dal deck attuale.
         Ritorna il token del deck (usato per riconoscere gli eventi di fine brano).
         """
+        self.ensure_stream()
         with self._lock:
             old = self._decks[self.active_deck_id]
             new_id = "B" if self.active_deck_id == "A" else "A"
