@@ -4,10 +4,12 @@ Autore: Paolo Basta
 1. Verifica/compila `BardoAI.exe` tramite PyInstaller e `BardoAI.spec` (PySide6, PyAV, Zero VLC).
 2. Crea l'archivio payload compresso con `BardoAI.exe`, `sfx/*.wav`, `bardo_icon.ico` e `LEGGIMI.txt`.
 3. Compila il setup finale `BardoAI_Setup.exe`.
+4. Calcola le impronte crittografiche SHA-256 e genera `dist/SHA256SUMS.txt`.
 """
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 import subprocess
 import sys
@@ -23,7 +25,7 @@ PAYLOAD_ZIP = BASE_DIR / "installer_payload.zip"
 def ensure_bardo_icon() -> None:
     """Genera l'icona `.ico` solo se non già presente nel repository (risolve bug #29 di bastaaaa.md)."""
     if ICON_PATH.is_file():
-        print(f"[1/4] Icona esistente trovata: {ICON_PATH.name} (nessuna sovrascrittura)")
+        print(f"[1/5] Icona esistente trovata: {ICON_PATH.name} (nessuna sovrascrittura)")
         return
 
     size = 256
@@ -43,7 +45,7 @@ def ensure_bardo_icon() -> None:
         format="ICO",
         sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)],
     )
-    print(f"[1/4] Icona generata: {ICON_PATH}")
+    print(f"[1/5] Icona generata: {ICON_PATH}")
 
 
 def build_bardo_exe() -> None:
@@ -52,7 +54,7 @@ def build_bardo_exe() -> None:
     if not pyinstaller_exe.is_file():
         pyinstaller_exe = Path(sys.executable).parent / "pyinstaller.exe"
 
-    print("[2/4] Compilazione di BardoAI.exe (PySide6 + PyAV)...")
+    print("[2/5] Compilazione di BardoAI.exe (PySide6 + PyAV)...")
     subprocess.run([str(pyinstaller_exe), "--noconfirm", "BardoAI.spec"], cwd=str(BASE_DIR), check=True)
     dist_exe = BASE_DIR / "dist" / "BardoAI.exe"
     if dist_exe.is_file():
@@ -61,13 +63,13 @@ def build_bardo_exe() -> None:
 
 def build_payload_zip() -> None:
     """Crea `installer_payload.zip` (100% privo di VLC, zero file DLL di terze parti non necessarie)."""
-    print("[3/4] Creazione archivio payload per l'installer (motore PyAV interno, zero VLC)...")
+    print("[3/5] Creazione archivio payload per l'installer (motore PyAV interno, zero VLC)...")
     readme_text = """====================================================================
-🪕 BARDO AI v2.6.0 — REGIA MUSICALE INTELLIGENTE & SOUNDBOARD GDR
+🪕 BARDO AI v2.6.1 — REGIA MUSICALE INTELLIGENTE & SOUNDBOARD GDR
 Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 ====================================================================
 
-Benvenuto in Bardo AI v2.6.0!
+Benvenuto in Bardo AI v2.6.1!
 Tutto il necessario (incluso il motore audio sounddevice + PyAV e i
 20 effetti sonori stereo GdR) è già contenuto in questa cartella.
 
@@ -101,11 +103,39 @@ def build_setup_exe() -> None:
     if not pyinstaller_exe.is_file():
         pyinstaller_exe = Path(sys.executable).parent / "pyinstaller.exe"
 
-    print("[4/4] Compilazione di BardoAI_Setup.exe...")
+    print("[4/5] Compilazione di BardoAI_Setup.exe...")
     subprocess.run([str(pyinstaller_exe), "--noconfirm", "BardoAI_Setup.spec"], cwd=str(BASE_DIR), check=True)
     dist_exe = BASE_DIR / "dist" / "BardoAI_Setup.exe"
     if dist_exe.is_file():
         shutil.copy2(dist_exe, BASE_DIR / "BardoAI_Setup.exe")
+
+
+def calculate_sha256(filepath: Path) -> str:
+    """Calcola l'hash crittografico SHA-256 di un file a blocchi di 64KB."""
+    h = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        while chunk := f.read(65536):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def generate_checksums() -> None:
+    """Genera il file standard SHA256SUMS.txt per tutti i binari presenti in dist/."""
+    dist_dir = BASE_DIR / "dist"
+    files = ["BardoAI.exe", "BardoAI_Setup.exe"]
+    lines = []
+    print("[5/5] Generazione impronte crittografiche SHA-256...")
+    for fname in files:
+        target = dist_dir / fname
+        if target.is_file():
+            digest = calculate_sha256(target)
+            lines.append(f"{digest}  {fname}")
+            print(f"      -> {fname}: {digest}")
+
+    if lines:
+        sums_file = dist_dir / "SHA256SUMS.txt"
+        sums_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print(f"      -> File generato con successo: {sums_file.name}")
 
 
 if __name__ == "__main__":
@@ -115,4 +145,5 @@ if __name__ == "__main__":
     build_payload_zip()
     if "--skip-installer-exe" not in sys.argv:
         build_setup_exe()
+    generate_checksums()
     print("[COMPLETATO] Build completato con successo!")
