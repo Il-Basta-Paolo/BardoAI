@@ -45,6 +45,45 @@ Con la versione 2.6.0 il progetto è stato completamente rifondato su un'archite
 
 ---
 
+## Architettura del Sistema
+
+```mermaid
+flowchart TD
+    Mic["Microfono"] --> VAD["VAD Adattivo (voice_listener.py)"]
+    VAD --> Vosk["STT Streaming Vosk (~150ms)"]
+    VAD --> Whisper["STT Frase Faster-Whisper"]
+    
+    Vosk -->|Trigger Rapidi SFX| SFX["SFXManager (sfx_manager.py)"]
+    Whisper -->|Frase Completa| AN["SceneAnalyzer (analyzer.py)\nNegazioni + Disambiguazione"]
+    
+    AN --> Director["Director (director.py)\nStato, Isteresi e Token Monotoni"]
+    Director --> MusicSvc["MusicService (music_service.py)\nCache locale + Risoluzione streaming"]
+    
+    MusicSvc --> AudioEngine["AudioEngine (audio_engine.py)\nMixer Unico sounddevice: Deck A/B + SFX + Ducking"]
+    SFX --> AudioEngine
+    
+    UI["PySide6 Desktop App (ui/main_window.py)"] <-->|Segnali Qt Thread-Safe| Director
+    UI <--> AudioEngine
+```
+
+### Moduli Principali
+
+| Modulo | Descrizione e Responsabilità |
+| :--- | :--- |
+| [`desktop_app.py`](desktop_app.py) | Entry point dell'applicazione desktop in PySide6 (Qt6) con supporto High-DPI. |
+| [`ui/`](ui/) | Componenti grafici dell'interfaccia: griglia atmosfere, soundboard, barra di trasporto e monitor vocale. |
+| [`director.py`](director.py) | Cabina di regia centrale: gestisce lo stato della scena con isteresi temporale e token monotoni anti-race condition. |
+| [`audio_engine.py`](audio_engine.py) | Mixer audio stereo float32 a 48kHz basato su PyAV e sounddevice, con dissolvenze S-Curve e audio ducking automatico. |
+| [`sfx_manager.py`](sfx_manager.py) | Gestore della soundboard: caricamento suoni in RAM, matching esatto a parole intere e gestione effetti personalizzati. |
+| [`analyzer.py`](analyzer.py) | Analizzatore semantico: separa clausole affermative e negative, disambigua gli omografi e gestisce il veto di pericolo. |
+| [`music_service.py`](music_service.py) | Ricerca e risoluzione tracce musicali con filtro per brani strumentali e cache su disco. |
+| [`ytdlp_manager.py`](ytdlp_manager.py) | Gestore dell'eseguibile esterno `yt-dlp` aggiornabile in background senza ricompilare l'app. |
+| [`voice_listener.py`](voice_listener.py) | Cattura microfonica continua con VAD e pipeline di trascrizione locale (Vosk + Faster-Whisper). |
+| [`storage.py`](storage.py) | Persistenza delle configurazioni con scritture atomiche e salvataggio credenziali cifrate tramite Windows Credential Manager (`keyring`). |
+| [`config_defaults.py`](config_defaults.py) | Configurazioni predefinite e catalogo dei 4 profili di gioco (Fantasy, Horror, Sci-Fi, Investigativo). |
+
+---
+
 ## Come iniziare
 
 ### Opzione 1: Eseguibile pronto all'uso (Windows)
