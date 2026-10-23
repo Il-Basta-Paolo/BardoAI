@@ -11,6 +11,10 @@ Quando fai il Dungeon Master al tavolo o su Discord, gestire la colonna sonora Ã
 
 **Bardo AI** risolve questo problema: ascolta la tua voce mentre narri in italiano, capisce cosa sta succedendo al tavolo e adatta la musica e gli effetti sonori in tempo reale, senza che tu debba toccare il mouse.
 
+<p align="center">
+  <img src="docs/screenshots/bardo_ui.png" alt="Interfaccia Desktop di Bardo AI v2.6.0" width="850"/>
+</p>
+
 ---
 
 ## Come funziona

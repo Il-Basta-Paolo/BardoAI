@@ -1,0 +1,40 @@
+name: 💡 Proposta Effetto Sonoro / Profilo GdR / Miglioramento
+description: Suggerisci nuovi suoni per la soundboard, estensioni al vocabolario o nuove funzionalità
+title: "[PROPOSTA]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Le idee migliori per Bardo AI arrivano direttamente dai Master e dai giocatori al tavolo! Condividi qui la tua proposta.
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Categoria della Proposta
+      options:
+        - "Nuovo Effetto Sonoro (SFX) per la Soundboard"
+        - "Nuova Atmosfera o Profilo di Campagna GdR"
+        - "Nuove Parole Chiave o Regole di Riconoscimento Vocale"
+        - "Miglioramento dell'Interfaccia Grafica o del Mixer Audio"
+        - "Altro"
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Descrizione Dettagliata
+      description: |
+        Spiega l'idea nel dettaglio:
+        - Se proponi un nuovo suono o parola chiave: quali frasi o parole dovrebbero attivarlo? (es. "scudo di legno", "ruggito di leone")
+        - Se proponi un file audio: assicurati che sia sotto licenza libera (CC0, CC-BY o GPL) e cita la fonte.
+        - Se proponi un profilo GdR: quali atmosfere e ritmi musicali dovrebbe includere?
+    validations:
+      required: true
+
+  - type: textarea
+    id: tabletop_use_case
+    attributes:
+      label: Utilità durante la Sessione
+      description: In quale situazione concreta al tavolo o su Discord questa aggiunta renderebbe la narrazione più immersiva?

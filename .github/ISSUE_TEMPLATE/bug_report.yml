@@ -1,0 +1,74 @@
+name: 🐛 Segnalazione Bug
+description: Segnala un malfunzionamento, crash o comportamento inatteso di Bardo AI
+title: "[BUG]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Grazie per la segnalazione! Compila questo modulo per aiutarci a riprodurre e risolvere il problema il più rapidamente possibile.
+
+  - type: input
+    id: version
+    attributes:
+      label: Versione di Bardo AI
+      description: Quale versione dell'applicazione stai utilizzando?
+      placeholder: es. v2.6.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: launch_method
+    attributes:
+      label: Modalità di Esecuzione
+      description: Come hai avviato Bardo AI?
+      options:
+        - "Installer Ufficiale (BardoAI_Setup.exe)"
+        - "Eseguibile Standalone Portatile (BardoAI.exe)"
+        - "Da Codice Sorgente (python desktop_app.py)"
+    validations:
+      required: true
+
+  - type: input
+    id: os_info
+    attributes:
+      label: Sistema Operativo
+      description: Versione e architettura di Windows
+      placeholder: es. Windows 11 Pro 64-bit
+    validations:
+      required: true
+
+  - type: input
+    id: audio_devices
+    attributes:
+      label: Dispositivi Audio Utilizzati
+      description: Quale microfono e uscita audio (cuffie/casse) stavi usando?
+      placeholder: es. Microfono USB Blue Yeti + Cuffie Jack Realtek
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descrizione del Problema
+      description: Spiega chiaramente cosa è accaduto e in quale momento della sessione.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Passaggi per Riprodurre il Bug
+      description: Elenca i passaggi minimi necessari per far ripresentare il problema.
+      value: |
+        1. Avvia Bardo AI
+        2. Seleziona il profilo...
+        3. Pronuncia la frase...
+        4. Si verifica l'errore...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log di Errore o Screenshot
+      description: Se visibile, incolla qui il messaggio di errore o trascina uno screenshot.
+      render: shell
