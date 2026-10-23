@@ -1,6 +1,6 @@
 # Bardo AI (v2.6.0)
 
-[![Tests](https://github.com/Il-Basta-Paolo/BardoAI/actions/workflows/tests.yml/badge.svg)](https://github.com/Il-Basta-Paolo/BardoAI/actions/workflows/tests.yml)
+[![Tests](https://github.com/Il-Basta-Paolo/BardoAI/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/Il-Basta-Paolo/BardoAI/actions/workflows/tests.yml)
 [![Release](https://img.shields.io/github/v/release/Il-Basta-Paolo/BardoAI?color=10b981&label=Release)](https://github.com/Il-Basta-Paolo/BardoAI/releases/latest)
 [![Changelog](https://img.shields.io/badge/Changelog-v2.6.0-blue)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
