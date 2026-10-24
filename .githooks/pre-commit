@@ -1,0 +1,15 @@
+#!/bin/sh
+# Git pre-commit hook per Bardo AI (Paolo Basta)
+
+python_cmd="./.venv/Scripts/python.exe"
+if [ ! -f "$python_cmd" ]; then
+    python_cmd="python"
+fi
+
+# Esegue la scansione di sicurezza se presente
+if [ -f ".dev_workflow/check_safety.py" ]; then
+    "$python_cmd" .dev_workflow/check_safety.py
+    if [ $? -ne 0 ]; then
+        exit 1
+    fi
+fi

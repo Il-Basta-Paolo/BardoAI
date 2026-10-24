@@ -1,0 +1,21 @@
+#!/bin/sh
+# Git pre-push hook per Bardo AI (Paolo Basta)
+
+python_cmd="./.venv/Scripts/python.exe"
+if [ ! -f "$python_cmd" ]; then
+    python_cmd="python"
+fi
+
+if [ -f ".dev_workflow/pre_push_hook.py" ]; then
+    "$python_cmd" .dev_workflow/pre_push_hook.py
+    if [ $? -ne 0 ]; then
+        exit 1
+    fi
+else
+    echo "[PRE-PUSH] Esecuzione suite di test automatizzata..."
+    "$python_cmd" -m pytest -q
+    if [ $? -ne 0 ]; then
+        echo "[PRE-PUSH] ❌ Test falliti. Push interrotto."
+        exit 1
+    fi
+fi
