@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use this software in your research, article, or project, please cite it using these metadata."
+title: "Bardo AI: Regia musicale autonoma ed effetti sonori vocali offline per sessioni di gioco di ruolo"
+abstract: "Bardo AI è una cabina di regia musicale autonoma e soundboard vocale per sessioni di gioco di ruolo (D&D, Cthulhu, Cyberpunk). Elabora in tempo reale il parlato del Dungeon Master con riconoscimento vocale 100% offline (Vosk e Faster-Whisper), analizza il contesto narrativo escludendo le negazioni e adatta dinamicamente le atmosfere musicali e gli effetti sonori con audio ducking automatico."
+authors:
+  - family-names: "Basta"
+    given-names: "Paolo"
+    alias: "Il-Basta-Paolo"
+version: "2.6.1"
+date-released: "2026-10-24"
+license: "MIT"
+repository-code: "https://github.com/Il-Basta-Paolo/BardoAI"
+url: "https://github.com/Il-Basta-Paolo/BardoAI"
+keywords:
+  - "tabletop-rpg"
+  - "dungeons-and-dragons"
+  - "soundboard"
+  - "speech-to-text"
+  - "audio-mixer"
+  - "offline-ai"
+  - "vosk"
+  - "faster-whisper"
+  - "pyside6"
+  - "python"
+type: software
