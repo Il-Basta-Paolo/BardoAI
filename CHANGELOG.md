@@ -13,7 +13,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/)
 - **Selettore Dispositivo Audio d'Uscita**: menu a tendina nella barra di trasporto per instradare a caldo il flusso sonoro su cuffie, altoparlanti o mixer virtuali (Voicemeeter, VB-Cable per Discord) senza dover riavviare l'applicazione.
 - **Modalità Auto-Float (Picture-in-Picture)**: contrazione automatica della finestra in una mini-barra flottante Always-on-Top non appena il Master passa ad un'altra applicazione (manuali PDF, appunti, VTT).
 - **Barra di Ricerca Rapida Soundboard**: casella di ricerca reattiva nella scheda effetti con filtro istantaneo per nome e parole chiave, switch automatico alla categoria "Tutti" e reset immediato con tasto `Esc`.
-- **Scorciatoie da Tastiera Globali & Dialog F1**: comandi rapidi per microfono (`Spazio`/`M`), volume master (frecce `Su`/`Giù`), salto traccia (`Ctrl+N`) e finestra interattiva di aiuto richiamabile con `F1`.
+- **Scorciatoie da Tastiera Globali & Dialog F1**: comandi rapidi per microfono (`Spazio`/`Ctrl+M`), volume master (frecce `Su`/`Giù`), salto traccia (`Ctrl+N`) e finestra interattiva di aiuto richiamabile con `F1`.
 - **Esportazione e Importazione Profili di Campagna (`.bardo.json`)**: supporto per salvare, esportare e importare pacchetti di configurazione personalizzati con risoluzione automatica delle collisioni di ID.
 
 ### 🔄 Modificato
