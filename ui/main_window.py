@@ -7,6 +7,7 @@ Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 
 from __future__ import annotations
 
+import re
 import sys
 import threading
 from pathlib import Path
@@ -17,6 +18,7 @@ from PySide6.QtGui import QDesktopServices, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -34,7 +36,7 @@ from config_defaults import list_available_profiles
 from director import Director, SceneDecision
 from music_service import MusicService
 from sfx_manager import SFXManager
-from storage import ConfigManager
+from storage import ConfigManager, export_profile_to_file, import_profile_from_file
 from ui.dialogs.settings_dialog import SettingsDialog
 from ui.dialogs.shortcuts_dialog import ShortcutsDialog
 from ui.styles import DARK_THEME_QSS
@@ -178,6 +180,19 @@ class MainWindow(QMainWindow):
             self.combo_profile.setCurrentIndex(init_idx)
 
         top_bar.addWidget(self.combo_profile)
+
+        # Pulsanti Esporta / Importa Profilo
+        self.btn_export_profile = QPushButton("📤")
+        self.btn_export_profile.setToolTip("Esporta il profilo corrente in file .bardo.json")
+        self.btn_export_profile.setFixedWidth(32)
+        self.btn_export_profile.clicked.connect(self._on_export_profile_clicked)
+        top_bar.addWidget(self.btn_export_profile)
+
+        self.btn_import_profile = QPushButton("📥")
+        self.btn_import_profile.setToolTip("Importa un profilo di campagna (.bardo.json)")
+        self.btn_import_profile.setFixedWidth(32)
+        self.btn_import_profile.clicked.connect(self._on_import_profile_clicked)
+        top_bar.addWidget(self.btn_import_profile)
         top_bar.addStretch()
 
         # Interruttore Auto-Float (Mini-Player automatico Always-on-Top)
@@ -445,6 +460,71 @@ class MainWindow(QMainWindow):
         self.transport.update_cooldown(rem)
 
     # ================================================================ Profile & Settings
+    def _reload_profile_combo(self, select_id: Optional[str] = None) -> None:
+        """Ricarica l'elenco dei profili nel menu a tendina preservando o impostando la selezione."""
+        self.combo_profile.blockSignals(True)
+        self.combo_profile.clear()
+        profiles = list_available_profiles(self.config)
+        for p in profiles:
+            self.combo_profile.addItem(f"{p.get('icon', '🎭')} {p.get('name', p['id'])}", p["id"])
+        target_id = select_id or self.active_profile_id
+        idx = self.combo_profile.findData(target_id)
+        if idx >= 0:
+            self.combo_profile.setCurrentIndex(idx)
+        self.combo_profile.blockSignals(False)
+
+    def _on_export_profile_clicked(self) -> None:
+        """Esporta il profilo attivo corrente in un file .bardo.json."""
+        current_profile = self.config.get("profiles", {}).get(self.active_profile_id)
+        if not current_profile:
+            QMessageBox.warning(self, "Attenzione", "Nessun profilo selezionato da esportare.")
+            return
+
+        slug = re.sub(r"[^a-zA-Z0-9_\-]+", "_", current_profile.get("name", "profilo")).strip("_")
+        default_filename = f"{slug}.bardo.json"
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Esporta Profilo di Campagna",
+            default_filename,
+            "Profilo Bardo AI (*.bardo.json);;File JSON (*.json)",
+        )
+        if not file_path:
+            return
+
+        ok = export_profile_to_file(current_profile, Path(file_path))
+        if ok:
+            QMessageBox.information(
+                self,
+                "Esportazione Completata",
+                f"Il profilo '{current_profile.get('name')}' è stato esportato con successo in:\n{file_path}",
+            )
+        else:
+            QMessageBox.critical(
+                self,
+                "Errore di Esportazione",
+                f"Impossibile scrivere il file di profilo:\n{file_path}",
+            )
+
+    def _on_import_profile_clicked(self) -> None:
+        """Importa un profilo da un file .bardo.json e lo attiva all'istante."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Importa Profilo di Campagna",
+            "",
+            "Profilo Bardo AI (*.bardo.json);;File JSON (*.json);;Tutti i file (*.*)",
+        )
+        if not file_path:
+            return
+
+        ok, msg, imported_prof = import_profile_from_file(Path(file_path), self.config)
+        if ok and imported_prof:
+            new_id = imported_prof["id"]
+            self._reload_profile_combo(select_id=new_id)
+            self._apply_profile(new_id)
+            QMessageBox.information(self, "Profilo Importato", msg)
+        else:
+            QMessageBox.warning(self, "Importazione Fallita", msg)
     def _on_profile_combo_changed(self, index: int) -> None:
         pid = self.combo_profile.itemData(index)
         if pid and pid != self.active_profile_id:

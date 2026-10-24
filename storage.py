@@ -13,8 +13,9 @@ import shutil
 import sys
 import tempfile
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 import keyring
 from pydantic import BaseModel, Field, field_validator
@@ -276,6 +277,111 @@ def generate_unique_mood_id(name: str, existing_moods: Dict[str, Any], current_i
     while f"{slug}_{counter}" in existing_moods:
         counter += 1
     return f"{slug}_{counter}"
+
+
+class ExportedProfilePackage(BaseModel):
+    """Contenitore per l'esportazione autonoma di un profilo in formato .bardo.json."""
+
+    format: str = "bardo_profile"
+    version: str = "1.0"
+    app_version: str = "2.6.1"
+    exported_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    profile: Dict[str, Any]
+
+
+def generate_unique_profile_id(
+    name: str, existing_profiles: Dict[str, Any], current_id: Optional[str] = None
+) -> str:
+    """Genera un ID univoco per un profilo senza sovrascrivere profili esistenti."""
+    if current_id and current_id not in existing_profiles:
+        return current_id
+    base_slug = current_id if current_id else (re.sub(r"[^a-z0-9]+", "_", (name or "campagna").lower()).strip("_") or "campagna")
+    if base_slug not in existing_profiles:
+        return base_slug
+    counter = 2
+    while f"{base_slug}_{counter}" in existing_profiles:
+        counter += 1
+    return f"{base_slug}_{counter}"
+
+
+def export_profile_to_file(profile_data: Dict[str, Any], target_path: Path) -> bool:
+    """Esporta un profilo di campagna in un file standalone .bardo.json validato."""
+    try:
+        pkg = ExportedProfilePackage(profile=copy.deepcopy(profile_data))
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(target_path, "w", encoding="utf-8") as f:
+            json.dump(pkg.model_dump(), f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"[Storage] Errore esportazione profilo {target_path}: {e}")
+        return False
+
+
+def import_profile_from_file(
+    file_path: Path, cfg: Dict[str, Any]
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """
+    Importa e valida un profilo da un file .bardo.json:
+    - Valida il pacchetto con ExportedProfilePackage.
+    - Assegna un ID univoco in caso di collisione.
+    - Inserisce il profilo in cfg['profiles'] e salva la configurazione su disco.
+    """
+    if not file_path.is_file():
+        return False, "File del profilo non trovato o non accessibile.", None
+    try:
+        raw_text = file_path.read_text(encoding="utf-8")
+        data = json.loads(raw_text)
+    except Exception as e:
+        return False, f"File JSON non valido o corrotto: {e}", None
+
+    profile_dict: Dict[str, Any]
+    if isinstance(data, dict) and "format" in data and "profile" in data:
+        try:
+            pkg = ExportedProfilePackage(**data)
+            profile_dict = pkg.profile
+        except Exception as e:
+            return False, f"Struttura pacchetto profilo non valida: {e}", None
+    elif isinstance(data, dict) and ("name" in data or "moods" in data):
+        profile_dict = data
+    else:
+        return False, "Il file non contiene un profilo Bardo AI valido.", None
+
+    name = str(profile_dict.get("name", "")).strip()
+    if not name:
+        return False, "Il profilo non contiene un nome valido.", None
+
+    moods = profile_dict.get("moods")
+    if not isinstance(moods, dict) or len(moods) == 0:
+        return False, "Il profilo deve contenere almeno un'atmosfera musicale valida.", None
+
+    validated_moods: Dict[str, Any] = {}
+    for mid, mdata in moods.items():
+        if isinstance(mdata, dict):
+            try:
+                m_copy = copy.deepcopy(mdata)
+                if "id" not in m_copy:
+                    m_copy["id"] = mid
+                m_model = MoodModel(**m_copy)
+                validated_moods[mid] = m_model.model_dump()
+            except Exception as e:
+                print(f"[Storage] Mood {mid} non valido scartato: {e}")
+    if not validated_moods:
+        return False, "Nessun mood valido trovato nel profilo da importare.", None
+
+    profiles = cfg.setdefault("profiles", {})
+    orig_id = str(profile_dict.get("id", "")).strip()
+    unique_id = generate_unique_profile_id(name, profiles, current_id=orig_id if orig_id else None)
+
+    imported = {
+        "id": unique_id,
+        "name": name,
+        "icon": str(profile_dict.get("icon", "🎭")),
+        "description": str(profile_dict.get("description", "")),
+        "moods": validated_moods,
+    }
+    profiles[unique_id] = imported
+    save_config(cfg)
+    return True, f"Profilo '{name}' importato con successo!", imported
 
 
 def _merge_mood_preserving_user_edits(default_mood: Dict[str, Any], user_mood: Dict[str, Any]) -> Dict[str, Any]:
