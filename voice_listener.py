@@ -13,6 +13,7 @@ Caratteristiche:
 from __future__ import annotations
 
 import json
+import os
 import queue
 import threading
 import zipfile
@@ -159,6 +160,9 @@ class ContinuousVoiceListener:
 
     def _init_models_async(self) -> None:
         """Inizializza i modelli in un thread di avvio."""
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return
+
         def _loader() -> None:
             # 1. Carica Vosk se disponibile
             if ModelManager.is_vosk_ready():
