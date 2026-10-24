@@ -157,7 +157,10 @@ Per eseguire i test automatici:
 ```powershell
 python -m pytest -v
 ```
-*(50 test unitari e di corpus semantico coprono parsing delle negazioni, mixer audio, soundboard e logica di regia).*
+*(54 test unitari e di corpus semantico coprono parsing delle negazioni, mixer audio, soundboard, sincronizzazione profili UI e logica di regia).*
+
+> 💡 **Hai dubbi su come instradare l'audio su Discord, sui rumori dei dadi al tavolo o sull'uso offline?**  
+> Consulta la guida alle [Domande Frequenti (FAQ)](docs/FAQ.md).
 
 ---
 
