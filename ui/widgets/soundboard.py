@@ -6,6 +6,7 @@ Risolve il bug #12 di bastaaaa.md (mostra tutti gli effetti, non solo i primi 20
 from pathlib import Path
 from typing import Any, Dict
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -21,6 +22,18 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+
+class SearchLineEdit(QLineEdit):
+    """Casella di ricerca rapida con gestione avanzata del tasto Escape."""
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key_Escape:
+            self.clear()
+            self.clearFocus()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
 
 class SFXButton(QFrame):
@@ -158,15 +171,35 @@ class SoundboardWidget(QWidget):
     def __init__(self, parent: QWidget = None) -> None:
         super().__init__(parent)
         self._sfx_library: Dict[str, Any] = {}
+        self._category_buttons: Dict[str, list] = {}
+        self._previous_tab_idx: int = 0
+        self._is_searching: bool = False
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(6)
 
-        # Header con pulsante per aggiungere SFX
+        # Header con ricerca e pulsante aggiunta SFX
         header_row = QHBoxLayout()
         header_row.addWidget(QLabel("SOUNDBOARD EFFETTI RAPIDI"))
         header_row.addStretch()
+
+        # Barra di ricerca rapida
+        self.search_box = SearchLineEdit()
+        self.search_box.setPlaceholderText("🔍 Cerca effetto o parola chiave... (Ctrl+F)")
+        self.search_box.setClearButtonEnabled(True)
+        self.search_box.setFixedWidth(240)
+        self.search_box.setStyleSheet(
+            "QLineEdit { background-color: #0b0f19; color: #f8fafc; border: 1px solid #334155; border-radius: 4px; padding: 4px 8px; font-size: 11px; }"
+            "QLineEdit:focus { border: 1px solid #3b82f6; background-color: #0f172a; }"
+        )
+        self.search_box.textChanged.connect(self._on_search_query_changed)
+        header_row.addWidget(self.search_box)
+
+        # Scorciatoia Ctrl+F
+        self.shortcut_search = QShortcut(QKeySequence("Ctrl+F"), self)
+        self.shortcut_search.activated.connect(self.focus_search)
+
         btn_add = QPushButton("➕ Aggiungi SFX...")
         btn_add.setStyleSheet("font-size: 11px; padding: 4px 10px;")
         btn_add.clicked.connect(self._open_add_dialog)
@@ -178,11 +211,17 @@ class SoundboardWidget(QWidget):
         self.tab_widget.currentChanged.connect(self._on_tab_changed)
         main_layout.addWidget(self.tab_widget)
 
+    def focus_search(self) -> None:
+        """Porta il focus sulla casella di ricerca e seleziona il testo."""
+        self.search_box.setFocus()
+        self.search_box.selectAll()
+
     def set_library(self, lib: Dict[str, Any]) -> None:
         self._sfx_library = lib
         self._rebuild_tabs()
 
     def _rebuild_tabs(self) -> None:
+        self._category_buttons.clear()
         curr_idx = max(0, self.tab_widget.currentIndex())
         self.tab_widget.clear()
 
@@ -220,6 +259,7 @@ class SoundboardWidget(QWidget):
             elif item_cat == category:
                 matched_items.append((sid, item))
 
+        btn_list = []
         for idx, (sid, item) in enumerate(matched_items):
             row = idx // columns
             col = idx % columns
@@ -227,13 +267,47 @@ class SoundboardWidget(QWidget):
             btn.triggered.connect(self.sfx_triggered.emit)
             btn.delete_requested.connect(self.custom_sfx_deleted.emit)
             grid.addWidget(btn, row, col)
+            btn_list.append((btn, item))
+
+        self._category_buttons[category] = btn_list
 
         scroll.setWidget(container)
         layout.addWidget(scroll)
         return page
 
-    def _on_tab_changed(self, _idx: int) -> None:
-        pass
+    def _on_tab_changed(self, idx: int) -> None:
+        if not self._is_searching:
+            self._previous_tab_idx = idx
+
+    def _on_search_query_changed(self, query: str) -> None:
+        q = query.strip().lower()
+        if q:
+            if not self._is_searching:
+                self._is_searching = True
+                self._previous_tab_idx = self.tab_widget.currentIndex()
+                if self.tab_widget.currentIndex() != 0:
+                    self.tab_widget.blockSignals(True)
+                    self.tab_widget.setCurrentIndex(0)
+                    self.tab_widget.blockSignals(False)
+        else:
+            if self._is_searching:
+                self._is_searching = False
+                if self._previous_tab_idx < self.tab_widget.count():
+                    self.tab_widget.blockSignals(True)
+                    self.tab_widget.setCurrentIndex(self._previous_tab_idx)
+                    self.tab_widget.blockSignals(False)
+
+        for _cat, btn_list in self._category_buttons.items():
+            for btn, item in btn_list:
+                if not q:
+                    btn.setVisible(True)
+                else:
+                    name = str(item.get("name", "")).lower()
+                    sid = str(item.get("id", "")).lower()
+                    hint = str(item.get("hint", "")).lower()
+                    kws = [str(k).lower() for k in item.get("keywords", [])]
+                    matches = (q in name) or (q in sid) or (q in hint) or any(q in kw for kw in kws)
+                    btn.setVisible(matches)
 
     def _open_add_dialog(self) -> None:
         dlg = AddCustomSFXDialog(self)
