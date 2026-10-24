@@ -12,7 +12,7 @@ import threading
 from pathlib import Path
 from typing import Any, Dict
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
@@ -75,6 +75,11 @@ class MainWindow(QMainWindow):
         # 1. Carica configurazione
         self.config = ConfigManager.load()
         self.bridge = EventBridge()
+
+        # Stato modalità fluttuante (Auto-Float PiP)
+        self.auto_float_enabled = bool(self.config.get("ui", {}).get("auto_float", True))
+        self.is_floating = False
+        self._normal_geometry = None
 
         # 2. Inizializza Motori Core
         self._init_core_engines()
@@ -168,6 +173,14 @@ class MainWindow(QMainWindow):
         top_bar.addWidget(self.combo_profile)
         top_bar.addStretch()
 
+        # Interruttore Auto-Float (Mini-Player automatico Always-on-Top)
+        self.btn_auto_float = QPushButton()
+        self.btn_auto_float.setCheckable(True)
+        self.btn_auto_float.setChecked(self.auto_float_enabled)
+        self.btn_auto_float.clicked.connect(self._toggle_auto_float)
+        self._update_auto_float_button_style()
+        top_bar.addWidget(self.btn_auto_float)
+
         # Pulsante Impostazioni
         btn_settings = QPushButton("⚙️ Impostazioni")
         btn_settings.clicked.connect(self._open_settings)
@@ -176,8 +189,8 @@ class MainWindow(QMainWindow):
         root_layout.addLayout(top_bar)
 
         # 2. Area Centrale (Splitter: Atmosfere in alto, Soundboard in basso)
-        splitter = QSplitter(Qt.Vertical)
-        splitter.setChildrenCollapsible(False)
+        self.splitter = QSplitter(Qt.Vertical)
+        self.splitter.setChildrenCollapsible(False)
 
         # Sezione Atmosfere (Moods)
         mood_container = QWidget()
@@ -189,7 +202,7 @@ class MainWindow(QMainWindow):
         mood_layout.addWidget(lbl_mood_hdr)
         self.mood_grid = MoodGridWidget()
         mood_layout.addWidget(self.mood_grid)
-        splitter.addWidget(mood_container)
+        self.splitter.addWidget(mood_container)
 
         # Sezione Soundboard
         sfx_container = QWidget()
@@ -199,11 +212,11 @@ class MainWindow(QMainWindow):
         self.soundboard = SoundboardWidget()
         self.soundboard.set_library(self.sfx_manager.get_library())
         sfx_layout.addWidget(self.soundboard)
-        splitter.addWidget(sfx_container)
+        self.splitter.addWidget(sfx_container)
 
-        splitter.setStretchFactor(0, 5)
-        splitter.setStretchFactor(1, 4)
-        root_layout.addWidget(splitter)
+        self.splitter.setStretchFactor(0, 5)
+        self.splitter.setStretchFactor(1, 4)
+        root_layout.addWidget(self.splitter)
 
         # 3. Widget Monitoraggio Vocale
         self.voice_monitor = VoiceMonitorWidget()
@@ -347,6 +360,10 @@ class MainWindow(QMainWindow):
         self.shortcut_vol_down = QShortcut(QKeySequence("Ctrl+Down"), self)
         self.shortcut_vol_down.activated.connect(self._on_volume_down)
 
+        # Ctrl+F11: Attiva / Disattiva Auto-Float PiP
+        self.shortcut_auto_float = QShortcut(QKeySequence("Ctrl+F11"), self)
+        self.shortcut_auto_float.activated.connect(self._toggle_auto_float)
+
     def _toggle_mic(self) -> None:
         """Inverte lo stato del microfono tramite tasto rapido (Ctrl+M)."""
         self.voice_monitor.btn_mic_toggle.toggle()
@@ -434,6 +451,105 @@ class MainWindow(QMainWindow):
         self.sfx_manager.delete_custom_sfx(sfx_id)
         self.soundboard.set_library(self.sfx_manager.get_library())
         self.bridge.sig_status.emit(f"🗑️ SFX '{sfx_id}' rimosso.")
+
+    # ================================================================ Auto-Float (PiP) Logic
+    def _update_auto_float_button_style(self) -> None:
+        """Aggiorna il testo, il tooltip e lo stile visivo del pulsante Auto-Float."""
+        if self.auto_float_enabled:
+            self.btn_auto_float.setText("⚡ Auto-Float: ON")
+            self.btn_auto_float.setToolTip(
+                "Auto-Float ATTIVO (Ctrl+F11):\n"
+                "Quando clicchi su un'altra finestra (Roll20, Foundry, browser),\n"
+                "Bardo AI diventa una mini-barra fluttuante Always-on-Top.\n"
+                "Clicca qui per disattivarlo."
+            )
+            self.btn_auto_float.setStyleSheet(
+                "font-size: 11px; font-weight: 600; background-color: #059669; color: white; border-radius: 4px; padding: 4px 8px;"
+            )
+        else:
+            self.btn_auto_float.setText("⚡ Auto-Float: OFF")
+            self.btn_auto_float.setToolTip(
+                "Auto-Float DISATTIVATO (Ctrl+F11):\n"
+                "Bardo AI si comporta come una normale finestra Windows.\n"
+                "Clicca qui per attivare il mini-player automatico."
+            )
+            self.btn_auto_float.setStyleSheet(
+                "font-size: 11px; font-weight: 600; background-color: #334155; color: #94a3b8; border-radius: 4px; padding: 4px 8px;"
+            )
+
+    def _toggle_auto_float(self) -> None:
+        """Abilita o disabilita la modalità Auto-Float (Picture-in-Picture)."""
+        self.auto_float_enabled = not self.auto_float_enabled
+        if "ui" not in self.config:
+            self.config["ui"] = {}
+        self.config["ui"]["auto_float"] = self.auto_float_enabled
+        ConfigManager.save(self.config)
+
+        self.btn_auto_float.setChecked(self.auto_float_enabled)
+        self._update_auto_float_button_style()
+
+        # Se disattivato mentre la finestra è ridotta a mini-barra, ripristina la vista estesa
+        if not self.auto_float_enabled and self.is_floating:
+            self._exit_floating_mode()
+
+    def _enter_floating_mode(self) -> None:
+        """Riduce l'interfaccia a una mini-barra Always-on-Top nell'angolo dello schermo."""
+        if self.is_floating:
+            return
+        self.is_floating = True
+        self._normal_geometry = self.geometry()
+
+        # Nasconde la sezione centrale (griglia atmosfere e soundboard)
+        self.splitter.hide()
+
+        # Consente il ridimensionamento a dimensioni compatte da mini-player
+        self.setMinimumSize(480, 160)
+        self.resize(520, 180)
+
+        # Sposta la finestra in basso a destra nello schermo corrente
+        screen = self.screen().availableGeometry() if self.screen() else None
+        if screen:
+            new_x = screen.right() - 520 - 24
+            new_y = screen.bottom() - 180 - 48
+            self.move(new_x, new_y)
+
+        # Applica il flag Always-on-Top senza rubare il focus all'applicazione attiva
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+        self.setAttribute(Qt.WA_ShowWithoutActivating, True)
+        self.show()
+
+    def _exit_floating_mode(self) -> None:
+        """Ripristina la finestra alla modalità estesa standard a grandezza naturale."""
+        if not self.is_floating:
+            return
+        self.is_floating = False
+
+        # Rimuove il flag Always-on-Top
+        self.setAttribute(Qt.WA_ShowWithoutActivating, False)
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, False)
+
+        # Ripristina la dimensione minima standard e mostra la griglia
+        self.setMinimumSize(960, 680)
+        self.splitter.show()
+
+        # Ripristina la geometria precedente
+        if self._normal_geometry:
+            self.setGeometry(self._normal_geometry)
+        else:
+            self.resize(1120, 800)
+
+        self.show()
+
+    def changeEvent(self, event: QEvent) -> None:
+        """Intercetta il cambio di attivazione della finestra per l'Auto-Float PiP."""
+        if event.type() == QEvent.ActivationChange:
+            if not self.isActiveWindow():
+                if self.auto_float_enabled and not self.is_floating:
+                    self._enter_floating_mode()
+            else:
+                if self.is_floating:
+                    self._exit_floating_mode()
+        super().changeEvent(event)
 
     def closeEvent(self, event) -> None:
         self.voice_listener.stop()
