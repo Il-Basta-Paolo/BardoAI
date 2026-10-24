@@ -10,7 +10,6 @@ Test per audio_engine.py:
 import math
 from pathlib import Path
 import numpy as np
-import pytest
 
 from audio_engine import AudioEngine, SAMPLE_RATE, CHANNELS, perceptual_gain
 from sfx_manager import load_audio_file_to_pcm

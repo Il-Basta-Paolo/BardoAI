@@ -32,6 +32,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
+    - name: Run Ruff linter and code quality checks
+      run: |
+        ruff check .
+
     - name: Run pytest test suite with coverage
       run: |
         pytest -v --cov=. --cov-config=.coveragerc --cov-report=term

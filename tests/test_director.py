@@ -5,10 +5,8 @@ Test per director.py:
 - Logica di isteresi: passaggio a pericolo istantaneo, de-escalation a calma controllata
 """
 
-import time
-import pytest
 from config_defaults import DEFAULT_CONFIG
-from director import Director, SceneDecision, URGENT_MOOD_IDS
+from director import Director
 
 
 def test_director_generation_token():

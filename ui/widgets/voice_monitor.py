@@ -2,8 +2,8 @@
 Widget di monitoraggio vocale, VU-meter in tempo reale e trascrizione live in PySide6.
 """
 
-from typing import Any, Dict, List, Optional
-from PySide6.QtCore import Qt, Signal
+from typing import Any, Dict, List
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,

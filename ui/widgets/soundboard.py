@@ -4,7 +4,7 @@ Risolve il bug #12 di bastaaaa.md (mostra tutti gli effetti, non solo i primi 20
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QDialog,

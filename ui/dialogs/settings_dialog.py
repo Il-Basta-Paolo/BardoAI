@@ -4,13 +4,11 @@ Salva in modo sicuro le credenziali nel Credential Manager (SecretVault) e aggio
 """
 
 from typing import Any, Dict
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,

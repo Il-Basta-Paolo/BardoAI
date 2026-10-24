@@ -17,7 +17,6 @@ os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from storage import ensure_data_dir

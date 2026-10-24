@@ -7,9 +7,8 @@ Test per sfx_manager.py:
 """
 
 from pathlib import Path
-import pytest
 
-from sfx_manager import SFXManager, DEFAULT_SFX_LIBRARY
+from sfx_manager import SFXManager
 
 
 def test_stem_collision_prevention():

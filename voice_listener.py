@@ -13,15 +13,11 @@ Caratteristiche:
 from __future__ import annotations
 
 import json
-import math
 import queue
-import shutil
-import sys
 import threading
-import time
 import zipfile
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
 import numpy as np
@@ -58,7 +54,6 @@ class ModelManager:
         on_complete: Optional[Callable[[bool, str], None]] = None,
     ) -> None:
         """Scarica e decomprime il modello Vosk italiano (~45MB) in background."""
-        target_dir = cls.get_vosk_model_dir()
         if cls.is_vosk_ready():
             if on_complete:
                 on_complete(True, "Modello Vosk già pronto.")

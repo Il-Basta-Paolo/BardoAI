@@ -47,7 +47,12 @@ def _resolve_writable_data_dir() -> Path:
 
 
 DATA_DIR = _resolve_writable_data_dir()
-get_data_dir = lambda: DATA_DIR
+
+
+def get_data_dir() -> Path:
+    return DATA_DIR
+
+
 CONFIG_FILE = DATA_DIR / "config.json"
 CUSTOM_SFX_DIR = DATA_DIR / "custom_sfx"
 AUDIO_CACHE_DIR = DATA_DIR / "audio_cache"

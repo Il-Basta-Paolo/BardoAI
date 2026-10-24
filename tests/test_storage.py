@@ -9,7 +9,6 @@ Test per storage.py e config_defaults.py:
 
 import json
 from pathlib import Path
-import pytest
 
 from config_defaults import (
     DEFAULT_CONFIG,
@@ -18,7 +17,6 @@ from config_defaults import (
     list_available_profiles,
 )
 from storage import (
-    ConfigManager,
     SecretVault,
     atomic_write_json,
     load_config_with_migration,

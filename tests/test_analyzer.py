@@ -6,10 +6,8 @@ Test per analyzer.py:
 - Riconoscimento biomi pulito
 """
 
-import pytest
 from analyzer import (
     SceneAnalyzer,
-    normalize_italian,
     split_affirmed_and_negated_text,
     preprocess_text_for_analysis,
 )

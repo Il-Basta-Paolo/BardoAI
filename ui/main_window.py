@@ -9,16 +9,14 @@ from __future__ import annotations
 
 import sys
 import threading
-import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -30,11 +28,11 @@ from PySide6.QtWidgets import (
 
 from analyzer import SceneAnalyzer
 from audio_engine import AudioEngine, MusicSource
-from config_defaults import DEFAULT_CONFIG, list_available_profiles
+from config_defaults import list_available_profiles
 from director import Director, SceneDecision
 from music_service import MusicService
 from sfx_manager import SFXManager
-from storage import ConfigManager, get_data_dir
+from storage import ConfigManager
 from ui.dialogs.settings_dialog import SettingsDialog
 from ui.styles import DARK_THEME_QSS
 from ui.widgets.mood_grid import MoodGridWidget

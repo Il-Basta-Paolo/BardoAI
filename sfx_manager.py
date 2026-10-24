@@ -26,7 +26,7 @@ import av
 import numpy as np
 
 from analyzer import normalize_italian, split_affirmed_and_negated_text
-from storage import CUSTOM_SFX_DIR, DATA_DIR, ensure_data_dir
+from storage import CUSTOM_SFX_DIR, ensure_data_dir
 
 
 def get_bundled_sfx_dir() -> Path:

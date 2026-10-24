@@ -4,8 +4,6 @@ Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
 
 import os
-import sys
-from pathlib import Path
 from typing import Generator
 import pytest
 
@@ -14,7 +12,7 @@ from PySide6.QtWidgets import QApplication
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
-from storage import ConfigManager, get_data_dir
+from storage import ConfigManager
 
 
 @pytest.fixture(scope="module")

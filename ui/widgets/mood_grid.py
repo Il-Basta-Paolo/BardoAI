@@ -3,14 +3,13 @@ Griglia dinamica e responsiva per la selezione delle atmosfere (Moods) in PySide
 Supporta qualsiasi numero di atmosfere (>9) senza nascondere elementi (risolve bug #12 di bastaaaa.md).
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QScrollArea,
     QVBoxLayout,
     QWidget,

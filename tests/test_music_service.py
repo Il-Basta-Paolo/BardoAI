@@ -5,11 +5,9 @@ Test per music_service.py e ytmusic_service.py:
 - Costruzione query e sanitizzazione titoli
 """
 
-import pytest
 from music_service import (
     is_instrumental_candidate,
     clean_music_title,
-    MusicService,
 )
 
 

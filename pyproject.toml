@@ -1,0 +1,21 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = [
+    ".venv",
+    ".git",
+    ".dev_workflow",
+    "build",
+    "dist",
+    "data",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+]
+ignore = [
+    "E501",  # Line too long
+]
