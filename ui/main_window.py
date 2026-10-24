@@ -1,5 +1,5 @@
 """
-Finestra Principale di Bardo AI v2.6.1 (MainWindow) in PySide6.
+Finestra Principale di Bardo AI v2.6.2 (MainWindow) in PySide6.
 Collega l'interfaccia grafica modulare con il Director, l'AudioEngine,
 il MusicService, il ContinuousVoiceListener e l'SFXManager.
 Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
@@ -61,7 +61,7 @@ class EventBridge(QObject):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Bardo AI v2.6.1 — Regia Musicale Intelligente & Soundboard GdR")
+        self.setWindowTitle("Bardo AI v2.6.2 — Regia Musicale Intelligente & Soundboard GdR")
         self.resize(1120, 800)
         self.setMinimumSize(960, 680)
 
@@ -161,7 +161,7 @@ class MainWindow(QMainWindow):
 
         lbl_app = QLabel("BARDO AI")
         lbl_app.setObjectName("headerTitle")
-        lbl_v2 = QLabel("v2.6.1")
+        lbl_v2 = QLabel("v2.6.2")
         lbl_v2.setStyleSheet("font-size: 11px; background-color: #3b82f6; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold;")
         top_bar.addWidget(lbl_app)
         top_bar.addWidget(lbl_v2)
@@ -579,7 +579,7 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             "Informazioni su Bardo AI",
-            "<h3>Bardo AI v2.6.1</h3>"
+            "<h3>Bardo AI v2.6.2</h3>"
             "<p><b>Regia musicale autonoma ed effetti sonori vocali per sessioni GdR</b></p>"
             "<p>Autore: <b>Paolo Basta</b> (<a href='https://github.com/Il-Basta-Paolo'>@Il-Basta-Paolo</a>)<br>"
             "Repository: <a href='https://github.com/Il-Basta-Paolo/BardoAI'>github.com/Il-Basta-Paolo/BardoAI</a><br>"

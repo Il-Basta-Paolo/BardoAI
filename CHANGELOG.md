@@ -6,6 +6,25 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
+## [2.6.2] — 2026-10-24
+
+### 🌟 Aggiunto
+- **VU-Meter Dinamico con Noise Gate Regolabile**: indicatore RMS in tempo reale del microfono nell'header con cursore di soglia trascinabile via mouse. L'interfaccia segnala visivamente il superamento della soglia (indicatore verde) o il filtraggio del rumore di fondo (indicatore grigio).
+- **Selettore Dispositivo Audio d'Uscita**: menu a tendina nella barra di trasporto per instradare a caldo il flusso sonoro su cuffie, altoparlanti o mixer virtuali (Voicemeeter, VB-Cable per Discord) senza dover riavviare l'applicazione.
+- **Modalità Auto-Float (Picture-in-Picture)**: contrazione automatica della finestra in una mini-barra flottante Always-on-Top non appena il Master passa ad un'altra applicazione (manuali PDF, appunti, VTT).
+- **Barra di Ricerca Rapida Soundboard**: casella di ricerca reattiva nella scheda effetti con filtro istantaneo per nome e parole chiave, switch automatico alla categoria "Tutti" e reset immediato con tasto `Esc`.
+- **Scorciatoie da Tastiera Globali & Dialog F1**: comandi rapidi per microfono (`Spazio`/`M`), volume master (frecce `Su`/`Giù`), salto traccia (`Ctrl+N`) e finestra interattiva di aiuto richiamabile con `F1`.
+- **Esportazione e Importazione Profili di Campagna (`.bardo.json`)**: supporto per salvare, esportare e importare pacchetti di configurazione personalizzati con risoluzione automatica delle collisioni di ID.
+
+### 🔄 Modificato
+- **Persistenza Impostazioni Utente**: salvataggio automatico della soglia del Noise Gate (`gate_threshold`) e del dispositivo di output (`output_device`) nel file di configurazione locale.
+- **Isolamento Thread Modelli Vocali**: introdotta protezione per la chiusura controllata dei thread in background Vosk e Faster-Whisper, prevenendo crash da teardown delle librerie C native.
+
+### 🧪 Test & Affidabilità
+- **Estensione Suite Automatizzata**: aggiunti 43 nuovi test unitari e di integrazione (93 test complessivi, 100% pass rate) a copertura di VU-meter, selettore audio, import/export profili, scorciatoie da tastiera e modalità floating.
+
+---
+
 ## [2.6.1] — 2026-10-24
 
 ### 🐛 Risolto

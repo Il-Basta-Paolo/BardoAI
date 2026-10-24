@@ -3,7 +3,7 @@
 [![Tests](https://github.com/Il-Basta-Paolo/BardoAI/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/Il-Basta-Paolo/BardoAI/actions/workflows/tests.yml)
 [![Release](https://img.shields.io/github/v/release/Il-Basta-Paolo/BardoAI?color=10b981&label=Release)](https://github.com/Il-Basta-Paolo/BardoAI/releases/latest)
 [![Coverage](https://img.shields.io/badge/Coverage-58%25-yellow.svg)](tests/)
-[![Changelog](https://img.shields.io/badge/Changelog-v2.6.1-blue)](CHANGELOG.md)
+[![Changelog](https://img.shields.io/badge/Changelog-v2.6.2-blue)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 
 **Regia musicale automatica ed effetti sonori vocali per sessioni GdR**
@@ -13,7 +13,7 @@ Quando fai il Dungeon Master al tavolo o su Discord, gestire la colonna sonora �
 **Bardo AI** risolve questo problema: ascolta la tua voce mentre narri in italiano, capisce cosa sta succedendo al tavolo e adatta la musica e gli effetti sonori in tempo reale, senza che tu debba toccare il mouse.
 
 <p align="center">
-  <img src="docs/screenshots/bardo_ui.png" alt="Interfaccia Desktop di Bardo AI v2.6.1" width="850"/>
+  <img src="docs/screenshots/bardo_ui.png" alt="Interfaccia Desktop di Bardo AI v2.6.2" width="850"/>
 </p>
 
 ---
@@ -40,22 +40,32 @@ Quando fai il Dungeon Master al tavolo o su Discord, gestire la colonna sonora �
 
 ---
 
-## Novità dell'ultima versione (v2.6.1)
+## Novità dell'ultima versione (v2.6.2)
 
-- **Sincronizzazione perfetta tra selettore profilo e griglia atmosfere all'avvio**: risolta l'anomalia per cui aprendo l'app il menu a tendina mostrava "Fantasy & D&D" mentre la griglia delle atmosfere sottostante mostrava quelle di Cyberpunk (o dell'ultimo profilo salvato). Ora all'avvio il selettore riflette fedelmente il profilo attivo memorizzato, e qualsiasi cambio (manuale o da codice) mantiene i componenti in perfetto allineamento bidirezionale senza conflitti di segnali.
-- **Suite di collaudo dedicata per la UI**: introdotti test unitari offscreen in `tests/test_ui_profile_sync.py` per verificare l'allineamento automatico dei profili su macchina vergine e prevenire regressioni visive.
+- **VU-Meter dinamico con Noise Gate regolabile a trascinamento**: visualizzazione in tempo reale del livello microfonico nell'header. Un indicatore interattivo permette di calibrare la soglia di ascolto trascinandola comodamente con il mouse: quando la voce supera la tacca il monitor si accende di verde e il comando viene elaborato, escludendo il brusio del tavolo o rumori ambientali. La regolazione viene memorizzata automaticamente.
+- **Selettore a caldo del dispositivo audio di uscita**: menu a tendina nella barra di trasporto per instradare musica ed effetti su cuffie, casse o periferiche audio virtuali (Voicemeeter, VB-Cable per Discord) al volo, senza riavviare l'applicazione o toccare i dispositivi predefiniti di Windows.
+- **Modalità Auto-Float (Picture-in-Picture)**: quando il Master sposta il focus su altre finestre (appunti, manuale PDF o VTT), Bardo AI si contrae automaticamente in una barra compatta Always-on-Top con i comandi essenziali (microfono, traccia, volume, atmosfera corrente), ripristinandosi a schermo intero quando richiamata.
+- **Barra di ricerca istantanea nella Soundboard**: casella di ricerca rapida con filtro in tempo reale per trovare al volo qualsiasi suono per nome o parole chiave. Se ci si trova in una categoria specifica, la digitazione passa in automatico alla vista "Tutti", e con il tasto `Esc` la ricerca si azzera all'istante.
+- **Scorciatoie globali da tastiera e guida rapida (F1)**: controlli veloci per gestire la sessione senza staccare le mani dalla tastiera (`Spazio` o `M` per silenziare/ascoltare il microfono, frecce `Su`/`Giù` per il volume, `Ctrl+N` per forzare il cambio brano) e finestra di aiuto interattiva richiamabile con `F1`.
+- **Esportazione e importazione profili di campagna (`.bardo.json`)**: pulsanti dedicati per salvare e condividere interi profili personalizzati in singoli file compatti, con gestione e risoluzione automatica delle collisioni di ID per proteggere i profili già presenti.
+- **Isolamento thread vocali e stabilità audio**: perfezionata la gestione della pipeline STT locale e la chiusura sicura dei thread native C in background, garantendo massima stabilità del mixer anche dopo ore continuative di sessione.
 
 <details>
-<summary><b>Visualizza le novità della release precedente (v2.6.0)</b></summary>
+<summary><b>Visualizza le novità delle release precedenti (v2.6.1 e v2.6.0)</b></summary>
 
-- **Interfaccia desktop nativa in PySide6 (Qt6)**: addio al browser e al server web locale. L'applicazione è ora un programma desktop Windows nativo, fluido, con supporto High-DPI e tema dark curato.
-- **Motore audio interno (sounddevice + PyAV)**: rimosso LibVLC e le relative DLL esterne. Ora un unico mixer leggero gestisce la decodifica audio interna a 48kHz stereo, le dissolvenze incrociate naturali e l'audio ducking (la musica di sottofondo si attenua automaticamente all'attivazione degli effetti sonori).
-- **Riconoscimento vocale 100% offline**: pipeline combinata con Vosk (latenza ~150ms per l'attivazione immediata degli effetti pronunciati a voce) e Faster-Whisper per la regia d'atmosfera. Zero invio di registrazioni vocali all'esterno, zero costi di API.
-- **Parsing semantico con gestione delle negazioni**: il motore analizza clausola per clausola la narrazione del Master; frasi come *"non ci sono mostri"* o *"non estraete le spade"* non attivano più erroneamente combattimenti o effetti.
-- **Disambiguazione lessicale italiana**: rimossi tutti i falsi positivi su omografi comuni come *"vi danno il benvenuto"* (verbo dare, non danno subito), *"intorno al fuoco"* (bivacco accogliente), *"costa dieci monete"* (prezzo, non mare).
-- **Sicurezza e archiviazione credenziali**: rimossa ogni archiviazione in chiaro di token e cookie nei file JSON. Le chiavi opzionali (Gemini, Spotify, OpenAI) vengono salvate in modo cifrato nel Credential Manager di Windows tramite `keyring`.
-- **4 Profili di campagna completi**: ambientazioni preconfigurate (Fantasy/D&D, Horror/Cthulhu, Sci-Fi/Cyberpunk, Giallo/Investigativo) con catalogo musicale e parole chiave dedicate.
-- **Eseguibili ufficiali e installer guidato**: disponibili sia la versione standalone portatile (`BardoAI.exe`) sia il setup Windows (`BardoAI_Setup.exe`) con metadati e scorciatoie di sistema.
+### Novità v2.6.1
+- **Sincronizzazione perfetta tra selettore profilo e griglia atmosfere all'avvio**: risolta l'anomalia per cui aprendo l'app il menu a tendina mostrava "Fantasy & D&D" mentre la griglia delle atmosfere sottostante mostrava quelle di Cyberpunk (o dell'ultimo profilo salvato).
+- **Suite di collaudo dedicata per la UI**: introdotti test unitari offscreen in `tests/test_ui_profile_sync.py` per verificare l'allineamento automatico dei profili su macchina vergine e prevenire regressioni visive.
+
+### Novità v2.6.0
+- **Interfaccia desktop nativa in PySide6 (Qt6)**: addio al browser e al server web locale. Programma desktop Windows nativo, fluido, con supporto High-DPI e tema dark curato.
+- **Motore audio interno (sounddevice + PyAV)**: rimosso LibVLC e le relative DLL esterne. Mixer interno a 48kHz stereo con dissolvenze incrociate naturali e audio ducking.
+- **Riconoscimento vocale 100% offline**: pipeline combinata con Vosk e Faster-Whisper. Zero invio di registrazioni vocali all'esterno, zero costi di API.
+- **Parsing semantico con gestione delle negazioni**: il motore analizza clausola per clausola la narrazione del Master escludendo frasi negate come *"non ci sono mostri"*.
+- **Disambiguazione lessicale italiana**: rimossi tutti i falsi positivi su omografi comuni come *"vi danno il benvenuto"*, *"intorno al fuoco"*, *"costa dieci monete"*.
+- **Sicurezza e archiviazione credenziali**: chiavi opzionali salvate in modo cifrato nel Credential Manager di Windows tramite `keyring`.
+- **4 Profili di campagna completi**: Fantasy/D&D, Horror/Cthulhu, Sci-Fi/Cyberpunk, Giallo/Investigativo.
+- **Eseguibili ufficiali e installer guidato**: disponibili sia la versione standalone portatile (`BardoAI.exe`) sia il setup Windows (`BardoAI_Setup.exe`).
 </details>
 
 > Consulta il file [`CHANGELOG.md`](CHANGELOG.md) per l'archivio completo e storico di tutti i cambiamenti.

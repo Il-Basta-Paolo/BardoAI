@@ -1,5 +1,5 @@
 """
-Configurazioni predefinite per Bardo AI v2.6.1 - Regia Musicale Automatica & Soundboard Vocale per GdR.
+Configurazioni predefinite per Bardo AI v2.6.2 - Regia Musicale Automatica & Soundboard Vocale per GdR.
 Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
 
@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Optional
 
 __author__ = "Paolo Basta"
 
-APP_VERSION = "2.6.1"
+APP_VERSION = "2.6.2"
 CONFIG_SCHEMA_VERSION = 2
 
 DEFAULT_CONFIG: Dict[str, Any] = {

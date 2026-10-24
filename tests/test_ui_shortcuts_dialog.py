@@ -87,6 +87,7 @@ def test_main_window_f1_shortcut_triggers_dialog(qapp, clean_config):
 
 def test_open_about_dialog(qapp, clean_config, monkeypatch):
     """Verifica che la finestra About mostri la versione e attribuisca il software a Paolo Basta."""
+    from config_defaults import APP_VERSION
     from ui.main_window import MainWindow
 
     win = MainWindow()
@@ -99,7 +100,7 @@ def test_open_about_dialog(qapp, clean_config, monkeypatch):
 
         args = mock_about.call_args[0]
         text_content = args[2]
-        assert "v2.6.1" in text_content
+        assert f"v{APP_VERSION}" in text_content
         assert "Paolo Basta" in text_content
     finally:
         win.close()
