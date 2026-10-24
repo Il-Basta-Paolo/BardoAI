@@ -260,7 +260,7 @@ class SoundboardWidget(QWidget):
                 matched_items.append((sid, item))
 
         btn_list = []
-        for idx, (sid, item) in enumerate(matched_items):
+        for idx, (_sid, item) in enumerate(matched_items):
             row = idx // columns
             col = idx % columns
             btn = SFXButton(item)

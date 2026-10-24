@@ -750,7 +750,7 @@ class SFXManager:
         scored_matches: List[Tuple[float, str, str]] = []
 
         lib = self.get_library()
-        for sfx_id, item in lib.items():
+        for sfx_id, _item in lib.items():
             if now - self._last_played_ts.get(sfx_id, 0.0) < self.per_sfx_cooldown:
                 continue
 

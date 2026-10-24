@@ -25,16 +25,22 @@ Grazie per l'interesse nel contribuire a **Bardo AI**! Che tu sia un Dungeon Mas
 Se vuoi proporre modifiche al codice tramite Pull Request:
 
 1. **Clona e prepara l'ambiente**:
+   Puoi configurare l'ambiente di sviluppo in un clic eseguendo lo script:
+   ```cmd
+   setup_dev_env.bat
+   ```
+   Oppure manualmente con:
    ```powershell
    git clone https://github.com/Il-Basta-Paolo/BardoAI.git
    cd BardoAI
    python -m venv .venv
    .\.venv\Scripts\Activate.ps1
    pip install -r requirements.txt
+   git config core.hooksPath .githooks
    ```
 
 2. **Esegui sempre i test automatici**:
-   Tutti i 50 test devono passare al 100% prima di inviare modifiche:
+   Tutti i 93 test unitari devono passare al 100% prima di inviare modifiche:
    ```powershell
    pytest -v
    ```

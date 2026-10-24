@@ -6,7 +6,7 @@ authors:
   - family-names: "Basta"
     given-names: "Paolo"
     alias: "Il-Basta-Paolo"
-version: "2.6.1"
+version: "2.6.2"
 date-released: "2026-10-24"
 license: "MIT"
 repository-code: "https://github.com/Il-Basta-Paolo/BardoAI"
