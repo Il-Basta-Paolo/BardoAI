@@ -165,9 +165,20 @@ python -m pytest -v
 ---
 
 ## Requisiti di sistema
-- **Sistema operativo**: Windows 10 o Windows 11 (64-bit).
-- **Microfono**: qualsiasi microfono USB o integrato configurato su Windows.
-- **Connessione Internet**: necessaria per lo streaming dei brani musicali e per il download iniziale dei modelli STT; gli effetti sonori e il motore audio funzionano anche completamente offline.
+
+![OS: Windows 10 | 11 (64-bit)](https://img.shields.io/badge/OS-Windows%2010%20%7C%2011%20(64--bit)-0078D6?logo=windows&logoColor=white)
+![RAM: 4 GB min](https://img.shields.io/badge/RAM-4%20GB%20min-orange)
+![Python: 3.11 | 3.12](https://img.shields.io/badge/Python-3.11%20%7C%203.12-2b5b84?logo=python&logoColor=white)
+![Audio: 48kHz Stereo](https://img.shields.io/badge/Audio-48kHz%20Stereo-purple)
+
+| Componente | Requisito Minimo | Consigliato |
+| :--- | :--- | :--- |
+| **Sistema Operativo** | Windows 10 (64-bit) | Windows 11 (64-bit) |
+| **Processore (CPU)** | Dual-Core 2.0 GHz (x86_64) | Quad-Core 2.5 GHz o superiore (Intel / AMD) |
+| **Memoria RAM** | 4 GB *(consumo a riposo ~400 MB)* | 8 GB |
+| **Spazio su Disco** | ~800 MB *(inclusi modelli vocali Vosk e Whisper)* | ~2 GB *(con cache tracce musicali locali)* |
+| **Dispositivo Audio** | Qualsiasi microfono USB, jack o integrato | Microfono cardioide direzionato verso il Master |
+| **Connessione Internet** | Necessaria al 1° avvio (modelli) e per lo streaming | Connessione broadband per streaming fluido (o offline completo con tracce in cache) |
 
 ---
 
