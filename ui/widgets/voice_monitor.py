@@ -3,7 +3,8 @@ Widget di monitoraggio vocale, VU-meter in tempo reale e trascrizione live in Py
 """
 
 from typing import Any, Dict, List
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -14,6 +15,77 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+
+class NoiseGateBar(QProgressBar):
+    """Barra di livello audio (VU-Meter) con indicatore visivo della soglia di Noise Gate."""
+
+    def __init__(self, parent: QWidget = None, threshold: int = 20) -> None:
+        super().__init__(parent)
+        self.threshold = max(1, min(99, threshold))
+        self.setRange(0, 100)
+        self.setValue(0)
+        self.setTextVisible(False)
+        self.setFixedHeight(10)
+        self.setToolTip(
+            f"VU-Meter con soglia Noise Gate (linea al {self.threshold}%).\n"
+            "Sotto la linea: rumore di fondo filtrato.\n"
+            "Sopra la linea: voce del Master riconosciuta."
+        )
+
+    def set_threshold(self, threshold: int) -> None:
+        self.threshold = max(1, min(99, threshold))
+        self.setToolTip(
+            f"VU-Meter con soglia Noise Gate (linea al {self.threshold}%).\n"
+            "Sotto la linea: rumore di fondo filtrato.\n"
+            "Sopra la linea: voce del Master riconosciuta."
+        )
+        self.update()
+
+    @property
+    def is_gate_open(self) -> bool:
+        return self.value() >= self.threshold
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        w = float(self.width())
+        h = float(self.height())
+        val = float(self.value())
+
+        # 1. Sfondo scuro (track)
+        bg_rect = QRectF(0, 0, w, h)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#1e293b"))
+        painter.drawRoundedRect(bg_rect, 4, 4)
+
+        # 2. Barra di riempimento (progress fill)
+        if val > 0:
+            fill_w = max(4.0, (val / 100.0) * w)
+            fill_rect = QRectF(0, 0, fill_w, h)
+
+            if val < self.threshold:
+                # Sotto soglia: colore slate/ambra spento (rumore ambiente)
+                painter.setBrush(QColor("#64748b"))
+            else:
+                # Sopra soglia: gradiente brillante da verde a ciano e rosso per picchi
+                grad = QLinearGradient(0, 0, w, 0)
+                grad.setColorAt(0.0, QColor("#10b981"))
+                grad.setColorAt(0.7, QColor("#06b6d4"))
+                grad.setColorAt(0.95, QColor("#ef4444"))
+                painter.setBrush(grad)
+
+            painter.drawRoundedRect(fill_rect, 4, 4)
+
+        # 3. Tacca visiva della soglia (Noise Gate Needle)
+        gate_x = (self.threshold / 100.0) * w
+        pen = QPen(QColor("#f8fafc"))
+        pen.setWidthF(1.5)
+        painter.setPen(pen)
+        painter.drawLine(gate_x, 0.0, gate_x, h)
+
+        painter.end()
 
 
 class VoiceMonitorWidget(QFrame):
@@ -48,20 +120,26 @@ class VoiceMonitorWidget(QFrame):
         top_ctrl.addWidget(self.device_combo)
         left_box.addLayout(top_ctrl)
 
-        # 2. VU Meter (Barra di livello audio)
+        # 2. VU Meter (Barra di livello audio con soglia Noise Gate)
         vu_box = QHBoxLayout()
         vu_box.setSpacing(6)
-        vu_box.addWidget(QLabel("LIVELLO:"))
-        self.vu_bar = QProgressBar()
-        self.vu_bar.setRange(0, 100)
-        self.vu_bar.setValue(0)
-        self.vu_bar.setTextVisible(False)
-        self.vu_bar.setFixedHeight(8)
-        self.vu_bar.setStyleSheet(
-            "QProgressBar { background-color: #1e293b; border-radius: 4px; border: none; }"
-            "QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10b981, stop:0.7 #38bdf8, stop:0.95 #ef4444); border-radius: 4px; }"
+        lbl_mic_title = QLabel("LIVELLO:")
+        lbl_mic_title.setStyleSheet("font-size: 10px; font-weight: 600; color: #94a3b8;")
+        vu_box.addWidget(lbl_mic_title)
+
+        self.vu_bar = NoiseGateBar(threshold=20)
+        vu_box.addWidget(self.vu_bar, stretch=1)
+
+        self.lbl_gate_status = QLabel("SOTTO SOGLIA")
+        self.lbl_gate_status.setStyleSheet(
+            "font-size: 9px; font-weight: 700; color: #64748b; background-color: #0f172a; "
+            "padding: 1px 5px; border-radius: 3px;"
         )
-        vu_box.addWidget(self.vu_bar)
+        self.lbl_gate_status.setToolTip(
+            "Stato del filtro rumore (Noise Gate): attiva il riconoscimento solo oltre la soglia."
+        )
+        vu_box.addWidget(self.lbl_gate_status)
+
         left_box.addLayout(vu_box)
 
         main_layout.addLayout(left_box)
@@ -116,6 +194,18 @@ class VoiceMonitorWidget(QFrame):
     def set_level(self, level: float) -> None:
         val = int(min(100, max(0, level * 100)))
         self.vu_bar.setValue(val)
+        if self.vu_bar.is_gate_open:
+            self.lbl_gate_status.setText("🎙️ VOCE")
+            self.lbl_gate_status.setStyleSheet(
+                "font-size: 9px; font-weight: 700; color: #10b981; background-color: #064e3b; "
+                "padding: 1px 5px; border-radius: 3px;"
+            )
+        else:
+            self.lbl_gate_status.setText("SOTTO SOGLIA")
+            self.lbl_gate_status.setStyleSheet(
+                "font-size: 9px; font-weight: 700; color: #64748b; background-color: #0f172a; "
+                "padding: 1px 5px; border-radius: 3px;"
+            )
 
     def set_transcript(self, text: str, is_partial: bool = False) -> None:
         if is_partial:
