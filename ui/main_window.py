@@ -12,14 +12,16 @@ import threading
 from pathlib import Path
 from typing import Any, Dict
 
-from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal
-from PySide6.QtGui import QIcon, QKeySequence, QShortcut
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QDesktopServices, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMenu,
+    QMessageBox,
     QPushButton,
     QSplitter,
     QVBoxLayout,
@@ -34,6 +36,7 @@ from music_service import MusicService
 from sfx_manager import SFXManager
 from storage import ConfigManager
 from ui.dialogs.settings_dialog import SettingsDialog
+from ui.dialogs.shortcuts_dialog import ShortcutsDialog
 from ui.styles import DARK_THEME_QSS
 from ui.widgets.mood_grid import MoodGridWidget
 from ui.widgets.soundboard import SoundboardWidget
@@ -185,6 +188,18 @@ class MainWindow(QMainWindow):
         btn_settings = QPushButton("⚙️ Impostazioni")
         btn_settings.clicked.connect(self._open_settings)
         top_bar.addWidget(btn_settings)
+
+        # Menu a tendina Aiuto
+        self.btn_help = QPushButton("❓ Aiuto ▾")
+        self.menu_help = QMenu(self)
+        self.act_shortcuts = self.menu_help.addAction("⌨️ Scorciatoie da Tastiera... (F1)")
+        self.act_shortcuts.triggered.connect(self._open_shortcuts_dialog)
+        self.act_faq = self.menu_help.addAction("💡 Domande Frequenti (FAQ)...")
+        self.act_faq.triggered.connect(self._open_faq_dialog)
+        self.act_about = self.menu_help.addAction("ℹ️ Informazioni su Bardo AI...")
+        self.act_about.triggered.connect(self._open_about_dialog)
+        self.btn_help.setMenu(self.menu_help)
+        top_bar.addWidget(self.btn_help)
 
         root_layout.addLayout(top_bar)
 
@@ -364,6 +379,10 @@ class MainWindow(QMainWindow):
         self.shortcut_auto_float = QShortcut(QKeySequence("Ctrl+F11"), self)
         self.shortcut_auto_float.activated.connect(self._toggle_auto_float)
 
+        # F1: Guida Scorciatoie da Tastiera
+        self.shortcut_help = QShortcut(QKeySequence("F1"), self)
+        self.shortcut_help.activated.connect(self._open_shortcuts_dialog)
+
     def _toggle_mic(self) -> None:
         """Inverte lo stato del microfono tramite tasto rapido (Ctrl+M)."""
         self.voice_monitor.btn_mic_toggle.toggle()
@@ -434,6 +453,33 @@ class MainWindow(QMainWindow):
             self.director.configure(self.config.get("analyzer", {}))
             self.audio_engine.set_music_volume(int(self.config.get("audio", {}).get("music_volume", 75)))
             self.audio_engine.set_sfx_volume(int(self.config.get("audio", {}).get("sfx_volume", 80)))
+
+    def _open_shortcuts_dialog(self) -> None:
+        """Apre la finestra di dialogo con l'elenco delle scorciatoie da tastiera (F1)."""
+        dlg = ShortcutsDialog(self)
+        dlg.exec()
+
+    def _open_faq_dialog(self) -> None:
+        """Apre la guida alle Domande Frequenti (docs/FAQ.md)."""
+        faq_path = Path(__file__).resolve().parent.parent / "docs" / "FAQ.md"
+        if faq_path.is_file():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(faq_path)))
+        else:
+            QDesktopServices.openUrl(QUrl("https://github.com/Il-Basta-Paolo/BardoAI/blob/main/docs/FAQ.md"))
+
+    def _open_about_dialog(self) -> None:
+        """Mostra le informazioni sull'applicazione, autore e versione."""
+        QMessageBox.about(
+            self,
+            "Informazioni su Bardo AI",
+            "<h3>Bardo AI v2.6.1</h3>"
+            "<p><b>Regia musicale autonoma ed effetti sonori vocali per sessioni GdR</b></p>"
+            "<p>Autore: <b>Paolo Basta</b> (<a href='https://github.com/Il-Basta-Paolo'>@Il-Basta-Paolo</a>)<br>"
+            "Repository: <a href='https://github.com/Il-Basta-Paolo/BardoAI'>github.com/Il-Basta-Paolo/BardoAI</a><br>"
+            "Licenza: Open Source MIT</p>"
+            "<p>Elaborazione vocale 100% offline tramite Vosk e Faster-Whisper. "
+            "Mixer audio stereo a 48kHz basato su PyAV e sounddevice.</p>",
+        )
 
     # ================================================================ Custom SFX
     def _on_custom_sfx_added(self, data: Dict[str, Any]) -> None:

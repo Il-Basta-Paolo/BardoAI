@@ -26,7 +26,7 @@ from storage import ConfigManager, SecretVault
 class SettingsDialog(QDialog):
     def __init__(self, current_config: Dict[str, Any], parent: QWidget = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Impostazioni di Bardo AI v2.6.0")
+        self.setWindowTitle("Impostazioni di Bardo AI v2.6.1")
         self.setFixedSize(540, 420)
         self.setStyleSheet("background-color: #0b0f19; color: #f8fafc;")
 
