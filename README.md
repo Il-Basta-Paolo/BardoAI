@@ -99,6 +99,8 @@ flowchart TD
 | [`storage.py`](storage.py) | Persistenza delle configurazioni con scritture atomiche e salvataggio credenziali cifrate tramite Windows Credential Manager (`keyring`). |
 | [`config_defaults.py`](config_defaults.py) | Configurazioni predefinite e catalogo dei 4 profili di gioco (Fantasy, Horror, Sci-Fi, Investigativo). |
 
+> Per approfondire le motivazioni tecniche, i compromessi e le alternative scartate nello sviluppo, consulta il [Registro delle Decisioni Architetturali (ADR)](docs/adr/README.md).
+
 ---
 
 ## Come iniziare
