@@ -35,6 +35,7 @@ class VoiceMonitorWidget(QFrame):
 
         top_ctrl = QHBoxLayout()
         self.btn_mic_toggle = QPushButton("🎙️ Ascolto Attivo")
+        self.btn_mic_toggle.setToolTip("Attiva o disattiva il microfono (Ctrl+M)")
         self.btn_mic_toggle.setCheckable(True)
         self.btn_mic_toggle.setChecked(True)
         self.btn_mic_toggle.setStyleSheet("font-weight: 600; font-size: 11px; background-color: #10b981; color: white;")

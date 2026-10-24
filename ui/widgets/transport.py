@@ -58,11 +58,13 @@ class TransportBar(QFrame):
         ctrl_layout.setSpacing(8)
 
         self.btn_play_pause = QPushButton("⏸")
+        self.btn_play_pause.setToolTip("Riproduci / Pausa (Ctrl+Spazio)")
         self.btn_play_pause.setFixedSize(40, 40)
         self.btn_play_pause.setStyleSheet("font-size: 16px; border-radius: 20px; background-color: #3b82f6;")
         self.btn_play_pause.clicked.connect(self.play_pause_clicked.emit)
 
         self.btn_skip = QPushButton("⏭")
+        self.btn_skip.setToolTip("Passa alla traccia successiva (Ctrl+Destra)")
         self.btn_skip.setFixedSize(36, 36)
         self.btn_skip.setStyleSheet("font-size: 14px; border-radius: 18px;")
         self.btn_skip.clicked.connect(self.skip_clicked.emit)
@@ -82,6 +84,7 @@ class TransportBar(QFrame):
         lbl_music_hdr.addWidget(self.lbl_music_pct)
 
         self.slider_music = QSlider(Qt.Horizontal)
+        self.slider_music.setToolTip("Volume Musica (Ctrl+Su / Ctrl+Giù)")
         self.slider_music.setRange(0, 100)
         self.slider_music.setValue(75)
         self.slider_music.setFixedWidth(140)
@@ -166,3 +169,9 @@ class TransportBar(QFrame):
         else:
             self.lbl_cooldown.setText(f"⏳ {remaining_sec:.0f}s")
             self.lbl_cooldown.setStyleSheet("font-size: 11px; color: #f59e0b; font-weight: 600;")
+
+    def step_music_volume(self, delta: int) -> int:
+        """Modifica il volume della musica di delta punti percentuali con clamping [0, 100]."""
+        new_val = max(0, min(100, self.slider_music.value() + delta))
+        self.slider_music.setValue(new_val)
+        return new_val

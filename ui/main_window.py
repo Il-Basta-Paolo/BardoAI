@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -89,6 +89,9 @@ class MainWindow(QMainWindow):
         self.cooldown_timer = QTimer(self)
         self.cooldown_timer.timeout.connect(self._update_cooldown_badge)
         self.cooldown_timer.start(100)
+
+        # 6. Scorciatoie da tastiera (Hotkeys)
+        self._setup_shortcuts()
 
         # 6. Avvia microfono e imposta primo profilo
         self._apply_profile(self.active_profile_id)
@@ -327,6 +330,35 @@ class MainWindow(QMainWindow):
         self.bridge.sig_track_started.emit(title, artist)
 
     # ================================================================ Transport Controls
+    def _setup_shortcuts(self) -> None:
+        """Inizializza le scorciatoie da tastiera per il controllo immediato al tavolo."""
+        self.shortcut_mic = QShortcut(QKeySequence("Ctrl+M"), self)
+        self.shortcut_mic.activated.connect(self._toggle_mic)
+
+        self.shortcut_play_pause = QShortcut(QKeySequence("Ctrl+Space"), self)
+        self.shortcut_play_pause.activated.connect(self._on_play_pause)
+
+        self.shortcut_skip = QShortcut(QKeySequence("Ctrl+Right"), self)
+        self.shortcut_skip.activated.connect(self._on_skip_track)
+
+        self.shortcut_vol_up = QShortcut(QKeySequence("Ctrl+Up"), self)
+        self.shortcut_vol_up.activated.connect(self._on_volume_up)
+
+        self.shortcut_vol_down = QShortcut(QKeySequence("Ctrl+Down"), self)
+        self.shortcut_vol_down.activated.connect(self._on_volume_down)
+
+    def _toggle_mic(self) -> None:
+        """Inverte lo stato del microfono tramite tasto rapido (Ctrl+M)."""
+        self.voice_monitor.btn_mic_toggle.toggle()
+
+    def _on_volume_up(self) -> None:
+        """Aumenta il volume della musica del 5% (Ctrl+Su)."""
+        self.transport.step_music_volume(5)
+
+    def _on_volume_down(self) -> None:
+        """Abbassa il volume della musica del 5% (Ctrl+Giù)."""
+        self.transport.step_music_volume(-5)
+
     def _on_mood_button_clicked(self, mood_id: str) -> None:
         self.director.manual_select(mood_id)
 

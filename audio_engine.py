@@ -366,6 +366,13 @@ class AudioEngine:
         with self._lock:
             self.paused = False
 
+    def set_paused(self, paused: bool) -> None:
+        """Imposta esplicitamente lo stato di pausa del motore audio."""
+        if paused:
+            self.pause()
+        else:
+            self.resume()
+
     def seek(self, seconds: float) -> None:
         deck = self._decks[self.active_deck_id]
         with deck.lock:
