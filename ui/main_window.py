@@ -10,7 +10,7 @@ from __future__ import annotations
 import sys
 import threading
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QIcon, QKeySequence, QShortcut
@@ -108,6 +108,9 @@ class MainWindow(QMainWindow):
     def _init_core_engines(self) -> None:
         # Audio Engine (Sounddevice + PyAV)
         self.audio_engine = AudioEngine()
+        saved_output_dev = self.config.get("audio", {}).get("output_device", None)
+        if saved_output_dev is not None:
+            self.audio_engine.set_output_device(saved_output_dev)
         music_vol = int(self.config.get("audio", {}).get("music_volume", 75))
         sfx_vol = int(self.config.get("audio", {}).get("sfx_volume", 80))
         self.audio_engine.set_music_volume(music_vol)
@@ -243,6 +246,9 @@ class MainWindow(QMainWindow):
 
         # 4. Barra di Trasporto Audio
         self.transport = TransportBar()
+        self.transport.populate_output_devices(AudioEngine.get_output_devices())
+        saved_out = self.config.get("audio", {}).get("output_device", None)
+        self.transport.select_device(saved_out)
         root_layout.addWidget(self.transport)
 
     # ================================================================ Signal Wiring
@@ -269,6 +275,7 @@ class MainWindow(QMainWindow):
         self.transport.music_volume_changed.connect(self.audio_engine.set_music_volume)
         self.transport.sfx_volume_changed.connect(self.audio_engine.set_sfx_volume)
         self.transport.lock_toggled.connect(self.director.set_locked)
+        self.transport.output_device_changed.connect(self._on_output_device_changed)
 
         # Event Bridge (Thread-Safe UI Updates)
         self.bridge.sig_transcript.connect(self.voice_monitor.set_transcript)
@@ -423,6 +430,14 @@ class MainWindow(QMainWindow):
         if "stt" not in self.config:
             self.config["stt"] = {}
         self.config["stt"]["gate_threshold"] = threshold
+        ConfigManager.save(self.config)
+
+    def _on_output_device_changed(self, device_index: Optional[int]) -> None:
+        """Cambia a caldo il dispositivo di output audio e persiste la scelta in configurazione."""
+        self.audio_engine.set_output_device(device_index)
+        if "audio" not in self.config:
+            self.config["audio"] = {}
+        self.config["audio"]["output_device"] = device_index
         ConfigManager.save(self.config)
 
     def _update_cooldown_badge(self) -> None:

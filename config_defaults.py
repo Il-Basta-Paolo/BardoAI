@@ -38,6 +38,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "gate_threshold": 20,
     },
     "audio": {
+        "output_device": None,
         "master_volume": 75,
         "crossfade_seconds": 3.5,
         "music_provider": "ytmusic",

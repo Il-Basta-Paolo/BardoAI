@@ -158,6 +158,7 @@ class AnalyzerSettingsModel(BaseModel):
 
 
 class AudioSettingsModel(BaseModel):
+    output_device: Optional[int] = None
     master_volume: int = 75
     crossfade_seconds: float = 3.5
     music_provider: str = "ytmusic"
@@ -190,6 +191,7 @@ class STTSettingsModel(BaseModel):
     whisper_enabled: bool = True
     whisper_model: str = "small"
     vad_threshold: float = 0.45
+    gate_threshold: int = 20
 
 
 class MoodModel(BaseModel):

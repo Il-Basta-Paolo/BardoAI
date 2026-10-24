@@ -4,8 +4,10 @@ Include controlli per play/pause, cambio traccia, volume musica e SFX,
 blocco scena e indicatore cooldown.
 """
 
+from typing import Any, Dict, List, Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -22,6 +24,7 @@ class TransportBar(QFrame):
     music_volume_changed = Signal(int)
     sfx_volume_changed = Signal(int)
     lock_toggled = Signal(bool)
+    output_device_changed = Signal(object)  # Optional[int]
 
     def __init__(self, parent: QWidget = None) -> None:
         super().__init__(parent)
@@ -114,6 +117,20 @@ class TransportBar(QFrame):
         vol_sfx_box.addWidget(self.slider_sfx)
         main_layout.addLayout(vol_sfx_box)
 
+        # 4.5 Selettore Dispositivo di Uscita Audio (Cuffie / Casse / Virtual Cable)
+        out_dev_box = QVBoxLayout()
+        out_dev_box.setSpacing(2)
+        lbl_out_hdr = QLabel("🔊 Uscita Audio")
+        lbl_out_hdr.setStyleSheet("color: #94a3b8; font-size: 11px;")
+        self.device_combo = QComboBox()
+        self.device_combo.setMinimumWidth(160)
+        self.device_combo.setMaximumWidth(220)
+        self.device_combo.setToolTip("Dispositivo di uscita audio per musica ed effetti sonori")
+        self.device_combo.currentIndexChanged.connect(self._on_device_selected)
+        out_dev_box.addWidget(lbl_out_hdr)
+        out_dev_box.addWidget(self.device_combo)
+        main_layout.addLayout(out_dev_box)
+
         # Separatore verticale
         sep2 = QFrame()
         sep2.setFrameShape(QFrame.VLine)
@@ -137,6 +154,28 @@ class TransportBar(QFrame):
         lock_box.addWidget(self.btn_lock)
         lock_box.addWidget(self.lbl_cooldown)
         main_layout.addLayout(lock_box)
+
+    def populate_output_devices(self, devices: List[Dict[str, Any]]) -> None:
+        """Popola il menu a tendina delle uscite audio senza emettere segnali spuri."""
+        self.device_combo.blockSignals(True)
+        self.device_combo.clear()
+        for dev in devices:
+            self.device_combo.addItem(dev["name"], dev["index"])
+        self.device_combo.blockSignals(False)
+
+    def select_device(self, device_index: Optional[int]) -> None:
+        """Seleziona l'uscita audio indicata nel menu a tendina."""
+        self.device_combo.blockSignals(True)
+        idx = self.device_combo.findData(device_index)
+        if idx >= 0:
+            self.device_combo.setCurrentIndex(idx)
+        else:
+            self.device_combo.setCurrentIndex(0)
+        self.device_combo.blockSignals(False)
+
+    def _on_device_selected(self, index: int) -> None:
+        dev_idx = self.device_combo.itemData(index)
+        self.output_device_changed.emit(dev_idx)
 
     def _on_music_vol_changed(self, val: int) -> None:
         self.lbl_music_pct.setText(f"{val}%")

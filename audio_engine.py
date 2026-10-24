@@ -179,11 +179,52 @@ class AudioEngine:
         self._frame_clock = 0
 
         self._stream: Optional[sd.OutputStream] = None
+        self.selected_device_index: Optional[int] = None
         self.last_error: Optional[str] = None
         self.available = av is not None
         self._start_stream()
 
-    # ================================================================ stream
+    # ================================================================ stream & devices
+    @staticmethod
+    def get_output_devices() -> List[Dict[str, Any]]:
+        """Restituisce l'elenco dei dispositivi di output audio disponibili su Windows."""
+        devices_out: List[Dict[str, Any]] = [
+            {"index": None, "name": "🔊 Uscita Predefinita di Windows"}
+        ]
+        seen_names = set()
+        try:
+            all_devs = sd.query_devices()
+            for idx, dev in enumerate(all_devs):
+                if dev.get("max_output_channels", 0) > 0:
+                    name = str(dev.get("name", f"Dispositivo {idx}")).strip()
+                    if name not in seen_names and "Mapper" not in name:
+                        seen_names.add(name)
+                        devices_out.append({"index": idx, "name": f"🔊 {name}"})
+        except Exception as e:
+            print(f"[AudioEngine] Errore lettura dispositivi di output: {e}")
+        return devices_out
+
+    def set_output_device(self, device_index: Optional[int]) -> bool:
+        """Cambia a caldo il dispositivo di output audio senza interrompere la riproduzione musicale."""
+        with self._lock:
+            if (
+                self.selected_device_index == device_index
+                and self._stream is not None
+                and getattr(self._stream, "active", False)
+            ):
+                return True
+            self.selected_device_index = device_index
+            old_stream = self._stream
+            self._stream = None
+            if old_stream is not None:
+                try:
+                    old_stream.stop()
+                    old_stream.close()
+                except Exception as e:
+                    print(f"[AudioEngine] Chiusura vecchio stream audio: {e}")
+            self._start_stream()
+            return self._stream is not None
+
     def _start_stream(self) -> None:
         try:
             self._stream = sd.OutputStream(
@@ -191,14 +232,34 @@ class AudioEngine:
                 channels=CHANNELS,
                 dtype="float32",
                 blocksize=BLOCK_SIZE,
+                device=self.selected_device_index,
                 callback=self._callback,
             )
             self._stream.start()
             self.last_error = None
         except Exception as e:
-            self.last_error = f"Impossibile aprire l'uscita audio: {e}"
+            self.last_error = f"Impossibile aprire l'uscita audio (device={self.selected_device_index}): {e}"
             self._stream = None
             print(f"[AudioEngine] {self.last_error}")
+            # Se un dispositivo specifico fallisce, fallback su None (dispositivo di sistema predefinito)
+            if self.selected_device_index is not None:
+                print("[AudioEngine] Tentativo di fallback su uscita audio predefinita...")
+                self.selected_device_index = None
+                try:
+                    self._stream = sd.OutputStream(
+                        samplerate=SAMPLE_RATE,
+                        channels=CHANNELS,
+                        dtype="float32",
+                        blocksize=BLOCK_SIZE,
+                        device=None,
+                        callback=self._callback,
+                    )
+                    self._stream.start()
+                    self.last_error = None
+                    print("[AudioEngine] Fallback riuscito su uscita predefinita.")
+                except Exception as ex2:
+                    self.last_error = f"Impossibile aprire anche l'uscita audio predefinita: {ex2}"
+                    self._stream = None
 
     def ensure_stream(self) -> bool:
         """Assicura che lo stream di output audio sia attivo, tentando la riapertura se necessario."""
