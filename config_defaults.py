@@ -35,6 +35,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "whisper_enabled": True,
         "whisper_model": "small",  # "tiny", "base", "small"
         "vad_threshold": 0.45,
+        "gate_threshold": 20,
     },
     "audio": {
         "master_volume": 75,

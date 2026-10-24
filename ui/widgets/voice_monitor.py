@@ -3,8 +3,8 @@ Widget di monitoraggio vocale, VU-meter in tempo reale e trascrizione live in Py
 """
 
 from typing import Any, Dict, List
-from PySide6.QtCore import QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen
+from PySide6.QtCore import QRectF, Qt, Signal, QTimer
+from PySide6.QtGui import QColor, QLinearGradient, QMouseEvent, QPainter, QPen
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -12,39 +12,106 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
 
 
 class NoiseGateBar(QProgressBar):
-    """Barra di livello audio (VU-Meter) con indicatore visivo della soglia di Noise Gate."""
+    """
+    Barra di livello audio (VU-Meter) con soglia di Noise Gate interattiva e regolabile col mouse.
+    Permette al Master di calibrare la sensibilità trascinando o cliccando la maniglia della soglia.
+    """
+
+    threshold_changed = Signal(int)
 
     def __init__(self, parent: QWidget = None, threshold: int = 20) -> None:
         super().__init__(parent)
-        self.threshold = max(1, min(99, threshold))
+        self.threshold = max(5, min(85, threshold))
+        self._dragging = False
+        self._hovering_handle = False
+
         self.setRange(0, 100)
         self.setValue(0)
         self.setTextVisible(False)
-        self.setFixedHeight(10)
+        self.setFixedHeight(12)
+        self.setMouseTracking(True)
+        self._update_tooltip()
+
+    def _update_tooltip(self) -> None:
         self.setToolTip(
-            f"VU-Meter con soglia Noise Gate (linea al {self.threshold}%).\n"
-            "Sotto la linea: rumore di fondo filtrato.\n"
-            "Sopra la linea: voce del Master riconosciuta."
+            f"Soglia Noise Gate: {self.threshold}%\n"
+            "• Trascina o clicca per regolare la sensibilità.\n"
+            "• Sotto la linea: rumore filtrato (dadi, respiro).\n"
+            "• Sopra la linea: voce del Master riconosciuta."
         )
 
     def set_threshold(self, threshold: int) -> None:
-        self.threshold = max(1, min(99, threshold))
-        self.setToolTip(
-            f"VU-Meter con soglia Noise Gate (linea al {self.threshold}%).\n"
-            "Sotto la linea: rumore di fondo filtrato.\n"
-            "Sopra la linea: voce del Master riconosciuta."
-        )
-        self.update()
+        clamped = max(5, min(85, threshold))
+        if clamped != self.threshold:
+            self.threshold = clamped
+            self._update_tooltip()
+            self.update()
 
     @property
     def is_gate_open(self) -> bool:
         return self.value() >= self.threshold
+
+    def _pos_to_threshold(self, x: float) -> int:
+        w = max(1.0, float(self.width()))
+        ratio = x / w
+        val = int(round(ratio * 100.0))
+        return max(5, min(85, val))
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.LeftButton:
+            self._dragging = True
+            new_th = self._pos_to_threshold(event.position().x())
+            self.set_threshold(new_th)
+            self.threshold_changed.emit(self.threshold)
+            QToolTip.showText(event.globalPosition().toPoint(), f"Soglia Noise Gate: {self.threshold}%", self)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        pos_x = event.position().x()
+        w = float(self.width())
+        gate_x = (self.threshold / 100.0) * w
+
+        if self._dragging:
+            new_th = self._pos_to_threshold(pos_x)
+            if new_th != self.threshold:
+                self.set_threshold(new_th)
+                self.threshold_changed.emit(self.threshold)
+            QToolTip.showText(event.globalPosition().toPoint(), f"Soglia Noise Gate: {self.threshold}%", self)
+            self.setCursor(Qt.SizeHorCursor)
+            event.accept()
+            return
+
+        # Rilevamento hover sulla maniglietta (entro 7px dalla soglia)
+        if abs(pos_x - gate_x) <= 7.0:
+            self._hovering_handle = True
+            self.setCursor(Qt.SizeHorCursor)
+        else:
+            self._hovering_handle = False
+            self.setCursor(Qt.PointingHandCursor)
+
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.LeftButton:
+            self._dragging = False
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._dragging = False
+        self._hovering_handle = False
+        self.setCursor(Qt.ArrowCursor)
+        super().leaveEvent(event)
 
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
@@ -66,10 +133,10 @@ class NoiseGateBar(QProgressBar):
             fill_rect = QRectF(0, 0, fill_w, h)
 
             if val < self.threshold:
-                # Sotto soglia: colore slate/ambra spento (rumore ambiente)
+                # Sotto soglia: colore slate/neutro (rumore di fondo)
                 painter.setBrush(QColor("#64748b"))
             else:
-                # Sopra soglia: gradiente brillante da verde a ciano e rosso per picchi
+                # Sopra soglia: gradiente brillante da verde a ciano e picco rosso
                 grad = QLinearGradient(0, 0, w, 0)
                 grad.setColorAt(0.0, QColor("#10b981"))
                 grad.setColorAt(0.7, QColor("#06b6d4"))
@@ -78,12 +145,27 @@ class NoiseGateBar(QProgressBar):
 
             painter.drawRoundedRect(fill_rect, 4, 4)
 
-        # 3. Tacca visiva della soglia (Noise Gate Needle)
+        # 3. Tacca visiva e Maniglia della soglia (Noise Gate Slider Handle)
         gate_x = (self.threshold / 100.0) * w
-        pen = QPen(QColor("#f8fafc"))
-        pen.setWidthF(1.5)
-        painter.setPen(pen)
+
+        # Linea verticale di riferimento
+        line_pen = QPen(QColor("#94a3b8"), 1.0, Qt.DashLine if not self._dragging else Qt.SolidLine)
+        painter.setPen(line_pen)
         painter.drawLine(gate_x, 0.0, gate_x, h)
+
+        # Cursore/Maniglia a slitta (afferrabile dal mouse)
+        handle_w = 6.0
+        handle_h = h
+        handle_rect = QRectF(gate_x - (handle_w / 2.0), 0.5, handle_w, handle_h - 1.0)
+
+        handle_color = QColor("#f8fafc") if (self._hovering_handle or self._dragging) else QColor("#cbd5e1")
+        painter.setPen(QPen(QColor("#0f172a"), 1.0))
+        painter.setBrush(handle_color)
+        painter.drawRoundedRect(handle_rect, 2.0, 2.0)
+
+        # Linea di grip centrale sulla maniglia
+        painter.setPen(QPen(QColor("#64748b"), 1.0))
+        painter.drawLine(gate_x, 2.5, gate_x, h - 2.5)
 
         painter.end()
 
@@ -91,6 +173,7 @@ class NoiseGateBar(QProgressBar):
 class VoiceMonitorWidget(QFrame):
     device_changed = Signal(object)  # Optional[int]
     mic_toggled = Signal(bool)
+    threshold_changed = Signal(int)
 
     def __init__(self, parent: QWidget = None) -> None:
         super().__init__(parent)
@@ -128,7 +211,13 @@ class VoiceMonitorWidget(QFrame):
         vu_box.addWidget(lbl_mic_title)
 
         self.vu_bar = NoiseGateBar(threshold=20)
+        self.vu_bar.threshold_changed.connect(self._on_threshold_changed)
         vu_box.addWidget(self.vu_bar, stretch=1)
+
+        self._calibrating = False
+        self._feedback_timer = QTimer(self)
+        self._feedback_timer.setSingleShot(True)
+        self._feedback_timer.timeout.connect(self._restore_gate_label)
 
         self.lbl_gate_status = QLabel("SOTTO SOGLIA")
         self.lbl_gate_status.setStyleSheet(
@@ -191,9 +280,28 @@ class VoiceMonitorWidget(QFrame):
             self.set_level(0.0)
         self.mic_toggled.emit(active)
 
+    def _on_threshold_changed(self, threshold: int) -> None:
+        self._calibrating = True
+        self.lbl_gate_status.setText(f"SOGLIA: {threshold}%")
+        self.lbl_gate_status.setStyleSheet(
+            "font-size: 9px; font-weight: 700; color: #38bdf8; background-color: #0c4a6e; "
+            "padding: 1px 5px; border-radius: 3px;"
+        )
+        self._feedback_timer.start(1200)
+        self.threshold_changed.emit(threshold)
+
+    def _restore_gate_label(self) -> None:
+        self._calibrating = False
+        self.set_level(self.vu_bar.value() / 100.0)
+
+    def set_gate_threshold(self, threshold: int) -> None:
+        self.vu_bar.set_threshold(threshold)
+
     def set_level(self, level: float) -> None:
         val = int(min(100, max(0, level * 100)))
         self.vu_bar.setValue(val)
+        if self._calibrating:
+            return
         if self.vu_bar.is_gate_open:
             self.lbl_gate_status.setText("🎙️ VOCE")
             self.lbl_gate_status.setStyleSheet(

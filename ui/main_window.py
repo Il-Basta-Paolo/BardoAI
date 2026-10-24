@@ -139,6 +139,7 @@ class MainWindow(QMainWindow):
             on_partial_transcript=self._on_voice_partial_transcript,
             on_status=lambda s: self.bridge.sig_status.emit(s),
             on_level=lambda lvl: self.bridge.sig_level.emit(lvl),
+            gate_threshold=int(self.config.get("stt", {}).get("gate_threshold", 20)),
         )
 
     # ================================================================ UI Layout
@@ -235,6 +236,8 @@ class MainWindow(QMainWindow):
 
         # 3. Widget Monitoraggio Vocale
         self.voice_monitor = VoiceMonitorWidget()
+        init_gate = int(self.config.get("stt", {}).get("gate_threshold", 20))
+        self.voice_monitor.set_gate_threshold(init_gate)
         self.voice_monitor.populate_devices(ContinuousVoiceListener.get_input_devices())
         root_layout.addWidget(self.voice_monitor)
 
@@ -258,6 +261,7 @@ class MainWindow(QMainWindow):
         # Voice Monitor
         self.voice_monitor.device_changed.connect(self.voice_listener.set_device)
         self.voice_monitor.mic_toggled.connect(self._on_mic_toggle_clicked)
+        self.voice_monitor.threshold_changed.connect(self._on_gate_threshold_changed)
 
         # Transport Bar
         self.transport.play_pause_clicked.connect(self._on_play_pause)
@@ -412,6 +416,14 @@ class MainWindow(QMainWindow):
             self.voice_listener.start()
         else:
             self.voice_listener.stop()
+
+    def _on_gate_threshold_changed(self, threshold: int) -> None:
+        """Calibra dinamicamente la sensibilità del Voice Activity Detection (VAD) e salva la configurazione."""
+        self.voice_listener.set_gate_threshold(threshold)
+        if "stt" not in self.config:
+            self.config["stt"] = {}
+        self.config["stt"]["gate_threshold"] = threshold
+        ConfigManager.save(self.config)
 
     def _update_cooldown_badge(self) -> None:
         rem = self.director.cooldown_remaining()

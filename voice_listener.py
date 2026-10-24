@@ -127,12 +127,14 @@ class ContinuousVoiceListener:
         on_status: Optional[Callable[[str], None]] = None,
         on_level: Optional[Callable[[float], None]] = None,
         use_whisper: bool = True,
+        gate_threshold: int = 20,
     ) -> None:
         self.on_transcript = on_transcript
         self.on_partial_transcript = on_partial_transcript
         self.on_status = on_status
         self.on_level = on_level
         self.use_whisper = use_whisper
+        self._gate_threshold = max(5, min(85, gate_threshold))
 
         self.selected_device_index: Optional[int] = None
         self.is_listening: bool = False
@@ -251,6 +253,16 @@ class ContinuousVoiceListener:
             if was_running:
                 self._start_internal()
 
+    def set_gate_threshold(self, threshold_pct: int) -> None:
+        """Imposta dinamicamente la soglia di Noise Gate (VAD) in percentuale (5-85%)."""
+        with self._lock:
+            self._gate_threshold = max(5, min(85, threshold_pct))
+
+    @property
+    def gate_threshold(self) -> int:
+        with self._lock:
+            return self._gate_threshold
+
     def start(self) -> None:
         with self._lock:
             if self.is_listening:
@@ -334,7 +346,6 @@ class ContinuousVoiceListener:
         active_speech_blocks = 0
 
         ambient_rms = 160.0
-        min_voice_rms = 260.0
         max_blocks = int(self.MAX_SPEECH_DURATION / self.BLOCK_DURATION)
         silence_cut_blocks = int(self.SILENCE_CUTOFF_SEC / self.BLOCK_DURATION)
 
@@ -364,7 +375,9 @@ class ContinuousVoiceListener:
                         except Exception:
                             pass
 
-                    threshold = max(min_voice_rms, ambient_rms * 1.85)
+                    cur_thresh_pct = getattr(self, "_gate_threshold", 20)
+                    dyn_min_rms = 60.0 + (cur_thresh_pct / 100.0) * 1500.0
+                    threshold = max(dyn_min_rms, ambient_rms * 1.85)
 
                     # Streaming Vosk per SFX istantanei (~150-200ms)
                     if self._vosk_recognizer is not None:
