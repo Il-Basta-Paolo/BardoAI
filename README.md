@@ -62,6 +62,24 @@ Quando fai il Dungeon Master al tavolo o su Discord, gestire la colonna sonora �
 
 ---
 
+## Perché Bardo AI (Confronto con le alternative)
+
+Gestire l'audio durante una sessione di gioco di ruolo dal vivo o su Discord richiede spesso compromessi. Esistono strumenti eccellenti sul mercato, ma ciascuno è pensato per un flusso di lavoro differente:
+
+| Caratteristica | Bardo AI | Spotify / YouTube | Kenku FM | Syrinscape |
+| :--- | :--- | :--- | :--- | :--- |
+| **Controllo al tavolo** | **A voce (hands-free)**: ascolta la narrazione | Manuale (Alt-Tab continuo su finestre esterne) | Manuale (click su interfaccia o bot Discord) | Manuale (click su macro e soundset dedicati) |
+| **Comprensione del parlato** | **Sì (locale)**: distingue descrizioni ed esclude negazioni | No | No | No |
+| **Effetti Sonori (SFX)** | **Istantanei da voce** (~150ms) o click | Ricerca manuale su playlist o video | Soundboard manuale a pulsanti | Pulsanti per campioni audio parametrici |
+| **Audio Ducking automatico** | **Sì**: attenua la musica quando parli o parte un SFX | No (richiede regolazione manuale del mixer) | No | Sì (all'interno del mixer proprietario) |
+| **Funzionamento offline** | **Sì**: STT e motore audio completamente in locale | No (richiede connessione costante e account) | Sì (per file locali salvati su disco) | Parziale (richiede download soundset proprietari) |
+| **Interruzione del ritmo** | **Zero**: il DM narra senza togliere le mani dal tavolo | Alta (cercare brani, saltare pubblicità) | Media (gestione bot e tracce) | Media (interfaccia complessa con decine di pulsanti) |
+| **Licenza e Costi** | **100% Gratuito & Open Source (MIT)** | Abbonamento mensile / Pubblicità | Acquisto una tantum (~$5) | Abbonamento mensile (~$11/mese) o pacchetti a pagamento |
+
+> **La filosofia di Bardo AI**: Syrinscape eccelle nella complessità dei paesaggi sonori cinematici, Kenku FM è perfetto per trasmettere tracce audio su Discord con una soundboard manuale, e Spotify offre un catalogo sconfinato. Bardo AI non cerca di sostituire questi strumenti sul loro terreno, ma risolve un problema diverso e specifico: **permettere al Dungeon Master di narrare liberamente senza mai spezzare il contatto visivo con i giocatori per toccare mouse e tastiera**.
+
+---
+
 ## Architettura del Sistema
 
 ```mermaid
