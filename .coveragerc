@@ -1,0 +1,26 @@
+[run]
+source = .
+disable_warnings = couldnt-parse
+omit =
+    tests/*
+    .dev_workflow/*
+    build/*
+    dist/*
+    build_installer.py
+    build_sfx_library.py
+    installer_gui.py
+    desktop_app.py
+    .venv/*
+    *shibokensupport*
+    *signature_bootstrap*
+    *pyscript*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if __name__ == .__main__.:
+    raise NotImplementedError
+    if TYPE_CHECKING:
+    pass
+show_missing = True

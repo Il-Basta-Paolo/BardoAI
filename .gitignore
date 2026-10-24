@@ -35,3 +35,8 @@ AGENTS.md
 .idea/
 *.tmp
 *.bak
+
+# Coverage cache
+.coverage
+.coverage.*
+htmlcov/
