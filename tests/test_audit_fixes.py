@@ -12,6 +12,7 @@ Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 from __future__ import annotations
 
 import os
+import threading
 import time
 from unittest.mock import MagicMock
 
@@ -177,9 +178,11 @@ def test_ai_worker_invoked_on_speech(qapp):
         win.config["analyzer"]["confidence_threshold"] = 5.0
 
         ai_called = []
+        done_event = threading.Event()
 
         async def fake_analyze(text, profile, cfg, current_mood_id=None):
             ai_called.append(text)
+            done_event.set()
             return {"mood_id": "taverna", "confidence": 8.0, "matched_by": "ai (gemini)"}
 
         win.analyzer.analyze = fake_analyze
@@ -187,7 +190,7 @@ def test_ai_worker_invoked_on_speech(qapp):
 
         # Frase senza match keyword forte per attivare l'AI in modalità hybrid
         win._on_voice_final_transcript("Guardate attentamente cosa sta succedendo lì in fondo")
-        time.sleep(0.15)
+        assert done_event.wait(timeout=3.0), "Timeout: il worker AI in background non è stato invocato entro 3 secondi."
 
         assert len(ai_called) == 1
         assert "Guardate" in ai_called[0]
