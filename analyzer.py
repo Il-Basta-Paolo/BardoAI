@@ -1,5 +1,5 @@
 """
-Motore di analisi semantica, morfologica e contestuale in Italiano per Bardo AI v2.6.0.
+Motore di analisi semantica, morfologica e contestuale in Italiano per Bardo AI v2.6.3
 Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
 
@@ -1101,7 +1101,7 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido:
   "custom_search_query": ""
 }}"""
 
-        provider = analyzer_cfg.get("ai_provider", "gemini")
+        provider = analyzer_cfg.get("ai_provider", "keywords")
         try:
             if provider == "gemini":
                 api_key = (analyzer_cfg.get("gemini_api_key") or "").strip()

@@ -4,7 +4,11 @@ Test per analyzer.py:
 - Disambiguazione omografi e falsi positivi (danno, fuoco, costa, farò, reale)
 - Veto del pericolo (danger veto)
 - Riconoscimento biomi pulito
+
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
+
+__author__ = "Paolo Basta"
 
 from analyzer import (
     SceneAnalyzer,

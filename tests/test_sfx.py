@@ -4,7 +4,11 @@ Test per sfx_manager.py:
 - Negazioni che inibiscono l'attivazione
 - Riconoscimento accurato di frasi e parole chiave
 - Gestione sicura degli SFX personalizzati
+
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
+
+__author__ = "Paolo Basta"
 
 from pathlib import Path
 

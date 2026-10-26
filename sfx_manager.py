@@ -1,7 +1,7 @@
 """
 Gestore degli Effetti Sonori (SFX) e Soundboard Istantanea ad Alta Chiarezza.
 Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
-Versione: 2.6.0:
+Versione: 2.6.3:
 - 20 effetti sonori masterizzati per GdR (armi, creature, magie, ambiente).
 - Caricamento in RAM come PCM float32 stereo a 48kHz tramite PyAV (zero VLC, zero problemi di codec).
 - Integrazione diretta con AudioEngine: ducking sample-accurate e soft-knee limiter.

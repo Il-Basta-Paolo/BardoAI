@@ -110,25 +110,49 @@ class YtDlpManager:
             self._status(f"Runtime deno non disponibile ({e}): alcune estrazioni potrebbero fallire.")
 
     def version(self) -> str:
-        if not self.exe_path.exists():
-            return "non installato"
+        if self.exe_path.exists():
+            try:
+                r = subprocess.run([str(self.exe_path), "--version"], capture_output=True, text=True,
+                                   timeout=15, creationflags=NO_WINDOW)
+                return (r.stdout or "").strip() or "sconosciuta"
+            except Exception:
+                return "sconosciuta"
         try:
-            r = subprocess.run([str(self.exe_path), "--version"], capture_output=True, text=True,
-                               timeout=15, creationflags=NO_WINDOW)
-            return (r.stdout or "").strip() or "sconosciuta"
+            import yt_dlp
+            return getattr(yt_dlp, "__version__", "installato")
         except Exception:
-            return "sconosciuta"
+            return "non installato"
+
+    def _has_executable(self) -> bool:
+        if self.exe_path.exists() or shutil.which("yt-dlp"):
+            return True
+        if not getattr(sys, "frozen", False):
+            try:
+                import yt_dlp  # noqa: F401
+                return True
+            except ImportError:
+                pass
+        return False
 
     def _base_cmd(self) -> List[str]:
-        cmd = [str(self.exe_path), "--no-warnings", "--no-playlist", "--socket-timeout", "10"]
+        if self.exe_path.exists():
+            cmd = [str(self.exe_path)]
+        elif shutil.which("yt-dlp"):
+            cmd = [shutil.which("yt-dlp")]
+        elif not getattr(sys, "frozen", False):
+            cmd = [sys.executable, "-m", "yt_dlp"]
+        else:
+            cmd = [str(self.exe_path)]
+        cmd += ["--no-warnings", "--no-playlist", "--socket-timeout", "10"]
         deno = self.deno_path if self.deno_path.exists() else (Path(shutil.which("deno")) if shutil.which("deno") else None)
         if deno and self._js_runtime_supported is not False:
             cmd += ["--js-runtimes", f"deno:{deno}"]
         return cmd
 
     def _run(self, args: List[str], timeout: float = 45.0) -> subprocess.CompletedProcess:
-        self._ready.wait(timeout=60)
-        if not self.exe_path.exists():
+        if not self._has_executable():
+            self._ready.wait(timeout=60)
+        if not self._has_executable() and not self.exe_path.exists():
             raise RuntimeError("yt-dlp non è installato (controlla la connessione internet).")
         cmd = self._base_cmd() + args
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
@@ -240,12 +264,27 @@ class YtDlpManager:
                 hit = self._url_cache.get(video_id)
                 if hit and time.time() - hit[0] < STREAM_URL_TTL:
                     return dict(hit[1], skip_segments=segments)
-            res = self._run(["-f", "bestaudio[acodec=opus]/bestaudio[ext=m4a]/bestaudio", "-j",
-                             f"https://www.youtube.com/watch?v={video_id}"])
-            if res.returncode != 0 or not res.stdout.strip():
-                err = (res.stderr or "").strip().splitlines()[-1:] or ["errore sconosciuto"]
-                raise RuntimeError(f"yt-dlp: {err[0][:200]}")
-            info = json.loads(res.stdout.strip().splitlines()[-1])
+            try:
+                res = self._run(["-f", "bestaudio[acodec=opus]/bestaudio[ext=m4a]/bestaudio", "-j",
+                                 f"https://www.youtube.com/watch?v={video_id}"])
+                if res.returncode != 0 or not res.stdout.strip():
+                    err = (res.stderr or "").strip().splitlines()[-1:] or ["errore sconosciuto"]
+                    raise RuntimeError(f"yt-dlp: {err[0][:200]}")
+                info = json.loads(res.stdout.strip().splitlines()[-1])
+            except Exception as e_run:
+                try:
+                    import yt_dlp
+                    ydl_opts = {
+                        "format": "bestaudio[acodec=opus]/bestaudio[ext=m4a]/bestaudio",
+                        "quiet": True,
+                        "skip_download": True,
+                        "socket_timeout": 10,
+                    }
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        url = f"https://www.youtube.com/watch?v={video_id}" if not video_id.startswith("http") else video_id
+                        info = ydl.extract_info(url, download=False)
+                except Exception as e_inproc:
+                    raise RuntimeError(f"Impossibile risolvere stream per {video_id}: {e_run} (in-proc: {e_inproc})") from e_run
             data = {
                 "uri": info.get("url"),
                 "title": info.get("title") or "",

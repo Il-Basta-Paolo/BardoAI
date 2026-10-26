@@ -1,6 +1,9 @@
 """
 Stili, palette colori e fogli di stile (QSS) moderni per l'interfaccia PySide6 di Bardo AI.
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
+
+__author__ = "Paolo Basta"
 
 DARK_THEME_QSS = """
 /* Stile globale */

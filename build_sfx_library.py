@@ -1,9 +1,12 @@
 """
-Costruisce la libreria interna di 20 Effetti Sonori GdR (sfx/*.wav) ad alta chiarezza.
+Costruisce la libreria interna di 20 Effetti Sonori GdR (sfx/*.wav) ad alta chiarezza per Bardo AI.
 Ogni effetto è composto e masterizzato a 44.1kHz 16-bit PCM (durata 1.5s - 3.0s, peak 0.95, alto RMS)
 combinando registrazioni studio Foley da Battle for Wesnoth e Flare RPG (GPL/CC),
 con normalizzazione e compressione dinamica per risultare nitido e inconfondibile sopra la musica.
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
+
+from __future__ import annotations
 
 import shutil
 import subprocess
@@ -12,6 +15,8 @@ from pathlib import Path
 from typing import List, Tuple
 import httpx
 import numpy as np
+
+__author__ = "Paolo Basta"
 
 BASE_DIR = Path(__file__).resolve().parent
 SFX_DIR = BASE_DIR / "sfx"

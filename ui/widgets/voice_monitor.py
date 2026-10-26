@@ -1,8 +1,11 @@
 """
-Widget di monitoraggio vocale, VU-meter in tempo reale e trascrizione live in PySide6.
+Widget di monitoraggio vocale, VU-meter in tempo reale e trascrizione live in PySide6 per Bardo AI.
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
 
-from typing import Any, Dict, List
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
 from PySide6.QtCore import QRectF, Qt, Signal, QTimer
 from PySide6.QtGui import QColor, QLinearGradient, QMouseEvent, QPainter, QPen
 from PySide6.QtWidgets import (
@@ -17,6 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+__author__ = "Paolo Basta"
+
 
 class NoiseGateBar(QProgressBar):
     """
@@ -26,7 +31,7 @@ class NoiseGateBar(QProgressBar):
 
     threshold_changed = Signal(int)
 
-    def __init__(self, parent: QWidget = None, threshold: int = 20) -> None:
+    def __init__(self, parent: Optional[QWidget] = None, threshold: int = 20) -> None:
         super().__init__(parent)
         self.threshold = max(5, min(85, threshold))
         self._dragging = False
@@ -175,7 +180,7 @@ class VoiceMonitorWidget(QFrame):
     mic_toggled = Signal(bool)
     threshold_changed = Signal(int)
 
-    def __init__(self, parent: QWidget = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("card")
         self.setFixedHeight(84)

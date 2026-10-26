@@ -1,5 +1,5 @@
 """
-Script di generazione dell'eseguibile e dell'installer distribuibile di Bardo AI v2.6.2:
+Script di generazione dell'eseguibile e dell'installer distribuibile di Bardo AI v2.6.3:
 Autore: Paolo Basta
 1. Verifica/compila `BardoAI.exe` tramite PyInstaller e `BardoAI.spec` (PySide6, PyAV, Zero VLC).
 2. Crea l'archivio payload compresso con `BardoAI.exe`, `sfx/*.wav`, `bardo_icon.ico` e `LEGGIMI.txt`.
@@ -78,11 +78,11 @@ def build_payload_zip() -> None:
     """Crea `installer_payload.zip` (100% privo di VLC, zero file DLL di terze parti non necessarie)."""
     print("[3/5] Creazione archivio payload per l'installer (motore PyAV interno, zero VLC)...")
     readme_text = """====================================================================
-🪕 BARDO AI v2.6.2 — REGIA MUSICALE INTELLIGENTE & SOUNDBOARD GDR
+🪕 BARDO AI v2.6.3 — REGIA MUSICALE INTELLIGENTE & SOUNDBOARD GDR
 Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 ====================================================================
 
-Benvenuto in Bardo AI v2.6.2!
+Benvenuto in Bardo AI v2.6.3!
 Tutto il necessario (incluso il motore audio sounddevice + PyAV e i
 20 effetti sonori stereo GdR) è già contenuto in questa cartella.
 

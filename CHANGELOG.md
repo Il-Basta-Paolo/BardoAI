@@ -6,6 +6,24 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
+## [2.6.3] — 2026-10-26
+
+### 🌟 Aggiunto
+- **Integrazione YouTube Music con Accesso Rapido (1 Clic)**: nuovo meccanismo di autenticazione interattivo via browser integrato per collegare l'account Google, accedere alle proprie playlist personali e preferiti, con memorizzazione protetta dei cookie in locale (ytmusic_auth.json).
+- **Scheda AI Dinamica & 100% Locale di Default**: riorganizzazione del pannello Intelligenza Artificiale nelle Impostazioni con commutazione dinamica tra modalità offline privata (Silero VAD + Vosk/Whisper + regole semantiche italiane, zero cloud) e provider esterni opzionali (Gemini, OpenAI, Ollama), mostrando a video solo i campi pertinenti.
+- **Sincronizzazione Bidirezionale dei Volumi**: controlli programmatici set_music_volume e set_sfx_volume nella barra di trasporto per preservare e allineare i volumi all'avvio e ad ogni salvataggio delle impostazioni.
+
+### 🔄 Modificato
+- **Mini-Player Auto-Float PiP Ottimizzato**: interfaccia compatta ad alta leggibilità (540x84), arricchita di comandi essenziali (microfono rapido, volume musica compatto, pulsante di ripristino istantaneo) e protetta da falsi trigger durante l'apertura di finestre modali o minimizzazione a barra delle applicazioni.
+- **Isolamento Credential Manager nei Test**: introdotta fixture globale con mock in RAM per SecretVault in 	ests/conftest.py, proteggendo permanentemente il portachiavi di sistema di Windows durante l'esecuzione della suite automatizzata.
+- **Packaging PyInstaller Deterministico**: inclusione esplicita di tutte le finestre di dialogo (shortcuts_dialog, settings_dialog) in BardoAI.spec.
+
+### 🐛 Risolto
+- **Prevenzione Sovrascrittura Chiavi in ConfigManager**: corretto il comportamento di save_config evitando che salvasse stringhe vuote in SecretVault qualora le chiavi API nel dizionario non fossero valorizzate.
+- **Teardown Sicuro dei Thread Audio**: prevenuta l'emissione di segnali Qt verso oggetti C++ eliminati (RuntimeError: Signal source has been deleted) in caso di chiusura improvvisa dell'applicazione durante il fetch audio.
+
+---
+
 ## [2.6.2] — 2026-10-24
 
 ### 🌟 Aggiunto

@@ -3,7 +3,11 @@ Test per director.py:
 - Macchina a stati centrale con lock
 - Token di generazione monotoni per prevenire race conditions su fetch lenti (bug #8 di bastaaaa.md)
 - Logica di isteresi: passaggio a pericolo istantaneo, de-escalation a calma controllata
+
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
+
+__author__ = "Paolo Basta"
 
 from config_defaults import DEFAULT_CONFIG
 from director import Director

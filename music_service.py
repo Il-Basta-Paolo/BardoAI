@@ -10,22 +10,35 @@ __author__ = "Paolo Basta"
 import base64
 import difflib
 import json
+import os
 import random
 import re
+import shutil
+import socket
+import subprocess
+import sys
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
 import httpx
 
-from storage import LOCAL_MUSIC_DIR, SecretVault
+from storage import LOCAL_MUSIC_DIR, SecretVault, YTMUSIC_AUTH_FILE, DATA_DIR, ensure_data_dir
 from ytdlp_manager import YtDlpManager
 
 try:
     from ytmusicapi import YTMusic
+    from ytmusicapi.helpers import get_authorization
 except Exception:  # pragma: no cover
     YTMusic = None  # type: ignore
+    get_authorization = None  # type: ignore
+
+try:
+    import websocket
+except Exception:  # pragma: no cover
+    websocket = None  # type: ignore
 
 LOCAL_EXTS = {".mp3", ".ogg", ".flac", ".opus", ".m4a", ".wav"}
 
@@ -240,6 +253,57 @@ class SpotifyCatalog:
         return {"title": entity.get("name") or "Playlist Spotify", "tracks": tracks, "playlistId": pid}
 
 
+def find_system_browser() -> Optional[str]:
+    """Cerca l'eseguibile di Microsoft Edge o Google Chrome su Windows."""
+    candidates = [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    ]
+    localapp = os.environ.get("LOCALAPPDATA")
+    if localapp:
+        candidates.append(str(Path(localapp) / "Microsoft" / "Edge" / "Application" / "msedge.exe"))
+        candidates.append(str(Path(localapp) / "Google" / "Chrome" / "Application" / "chrome.exe"))
+    for p in candidates:
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def _find_free_port(preferred: int = 9239) -> int:
+    """Trova una porta TCP locale libera per il Chrome DevTools Protocol."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("127.0.0.1", preferred))
+            return preferred
+        except OSError:
+            s.bind(("127.0.0.1", 0))
+            return s.getsockname()[1]
+
+
+def _kill_process_tree(pid: int) -> None:
+    """Termina in modo sicuro l'intero albero di processi (browser + schede figlie) su Windows."""
+    if sys.platform == "win32":
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            return
+        except Exception:
+            pass
+    try:
+        import signal
+
+        sig = getattr(signal, "SIGTERM", 9)
+        os.kill(pid, sig)
+    except Exception:
+        pass
+
+
 # --------------------------------------------------------------------------- servizio
 class MusicService:
     def __init__(self, ytdlp: YtDlpManager) -> None:
@@ -250,14 +314,265 @@ class MusicService:
         self._search_cache: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
         self._resolve_cache: Dict[str, str] = {}
 
+    @property
+    def is_authenticated(self) -> bool:
+        """True se il file ytmusic_auth.json esiste ed è valido."""
+        return YTMUSIC_AUTH_FILE.is_file()
+
+    def get_auth_status(self) -> Dict[str, Any]:
+        """Restituisce lo stato corrente di autenticazione per la UI."""
+        auth_ok = self.is_authenticated
+        return {
+            "authenticated": auth_ok,
+            "auth_file": str(YTMUSIC_AUTH_FILE),
+            "auth_file_exists": auth_ok,
+        }
+
+    def reload_client(self) -> None:
+        """Ricarica il client YTMusic (autenticato o ospite) azzerando le cache."""
+        with self._ytm_lock:
+            self.ytm = None
+            self._search_cache.clear()
+            self._resolve_cache.clear()
+        self._client()
+
+    def disconnect_account(self) -> None:
+        """Rimuove il file di autenticazione locale e il profilo browser temporaneo."""
+        with self._ytm_lock:
+            if YTMUSIC_AUTH_FILE.exists():
+                try:
+                    YTMUSIC_AUTH_FILE.unlink(missing_ok=True)
+                except Exception:
+                    pass
+            prof = DATA_DIR / "ytm_browser_profile"
+            if prof.exists():
+                try:
+                    shutil.rmtree(prof, ignore_errors=True)
+                except Exception:
+                    pass
+            self.ytm = None
+            self._search_cache.clear()
+            self._resolve_cache.clear()
+        self._client()
+
     def _client(self):
         with self._ytm_lock:
             if self.ytm is None and YTMusic is not None:
                 try:
-                    self.ytm = YTMusic()
+                    if YTMUSIC_AUTH_FILE.is_file():
+                        self.ytm = YTMusic(str(YTMUSIC_AUTH_FILE))
+                    else:
+                        self.ytm = YTMusic()
                 except Exception as e:
-                    print(f"[Music] ytmusicapi non disponibile: {e}")
+                    print(f"[Music] Inizializzazione YTMusic fallita ({e}), uso modalità ospite")
+                    try:
+                        self.ytm = YTMusic()
+                    except Exception:
+                        self.ytm = None
             return self.ytm
+
+    @staticmethod
+    def _save_auth_cookie_string(cookie_str: str, authuser: str = "0") -> None:
+        """Costruisce e salva il file ytmusic_auth.json partendo dalla stringa Cookie."""
+        m = re.search(r"(?:__Secure-3PAPISID|SAPISID)=([^;\s\"']+)", cookie_str)
+        if not m:
+            raise ValueError(
+                "Cookie di sessione Google (__Secure-3PAPISID o SAPISID) non trovato. "
+                "Assicurati di aver effettuato l'accesso su music.youtube.com."
+            )
+        sapisid = m.group(1).strip()
+        if "__Secure-3PAPISID=" not in cookie_str:
+            cookie_str = f"__Secure-3PAPISID={sapisid}; " + cookie_str
+
+        origin = "https://music.youtube.com"
+        auth_header = ""
+        if get_authorization is not None:
+            try:
+                auth_header = get_authorization(f"{sapisid} {origin}")
+            except Exception:
+                pass
+
+        headers = {
+            "user-agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+            ),
+            "accept": "*/*",
+            "accept-encoding": "gzip, deflate",
+            "content-type": "application/json",
+            "content-encoding": "gzip",
+            "origin": origin,
+            "x-origin": origin,
+            "x-goog-authuser": str(authuser),
+            "cookie": cookie_str,
+        }
+        if auth_header:
+            headers["authorization"] = auth_header
+
+        ensure_data_dir()
+        with open(YTMUSIC_AUTH_FILE, "w", encoding="utf-8") as f:
+            json.dump(headers, f, indent=2, ensure_ascii=False)
+
+    def save_manual_headers(self, raw_input: str) -> None:
+        """Salva headers/cookie incollati manualmente dall'utente."""
+        text = raw_input.strip()
+        if not text:
+            raise ValueError("Il testo incollato è vuoto.")
+        if text.startswith("{") and text.endswith("}"):
+            data = json.loads(text)
+            ensure_data_dir()
+            with open(YTMUSIC_AUTH_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        elif "cookie:" in text.lower() or "sapisid" in text.lower() or "__secure" in text.lower():
+            cookie_match = re.search(r"cookie:\s*(.+)", text, re.IGNORECASE)
+            cookie_str = cookie_match.group(1).strip() if cookie_match else text
+            self._save_auth_cookie_string(cookie_str)
+        else:
+            try:
+                from ytmusicapi.auth.browser import setup_browser
+                setup_browser(filepath=str(YTMUSIC_AUTH_FILE), headers_raw=text)
+            except Exception as e:
+                raise ValueError(f"Impossibile interpretare gli headers: {e}") from e
+        self.reload_client()
+
+    def login_with_browser_window(
+        self,
+        timeout_sec: int = 180,
+        cancel_event: Optional[threading.Event] = None,
+        progress_cb: Optional[Callable[[str], None]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Apre una finestra browser dedicata su music.youtube.com.
+        Intercetta l'accesso tramite Chrome DevTools Protocol (CDP),
+        salva i cookie in ytmusic_auth.json, chiude il browser e ricarica il client.
+        """
+        browser_exe = find_system_browser()
+        if not browser_exe:
+            raise RuntimeError("Nessun browser compatibile trovato (richiesto Microsoft Edge o Google Chrome).")
+
+        if websocket is None:
+            raise RuntimeError("Modulo 'websocket-client' non installato.")
+
+        ensure_data_dir()
+        profile_dir = DATA_DIR / "ytm_browser_profile"
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        debug_port = _find_free_port(9239)
+
+        cmd = [
+            browser_exe,
+            "--app=https://music.youtube.com",
+            f"--user-data-dir={profile_dir}",
+            f"--remote-debugging-port={debug_port}",
+            "--remote-allow-origins=*",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--window-size=980,720",
+        ]
+
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        start_ts = time.time()
+
+        try:
+            while time.time() - start_ts < timeout_sec:
+                if cancel_event and cancel_event.is_set():
+                    _kill_process_tree(proc.pid)
+                    raise RuntimeError("Accesso annullato dall'utente.")
+
+                if proc.poll() is not None:
+                    raise RuntimeError("Finestra di accesso chiusa prima del completamento.")
+
+                if progress_cb:
+                    elapsed = int(time.time() - start_ts)
+                    progress_cb(f"In attesa del login su YouTube Music... ({elapsed}s)")
+
+                try:
+                    resp = httpx.get(f"http://127.0.0.1:{debug_port}/json", timeout=2.0)
+                    targets = resp.json()
+                    # Preferisce target di tipo 'page', altrimenti ripiega su qualsiasi target valido
+                    ws_url = next(
+                        (t.get("webSocketDebuggerUrl") for t in targets if t.get("type") == "page" and t.get("webSocketDebuggerUrl")),
+                        None,
+                    ) or next(
+                        (t.get("webSocketDebuggerUrl") for t in targets if t.get("webSocketDebuggerUrl")),
+                        None,
+                    )
+                    if ws_url:
+                        ws = websocket.create_connection(ws_url, timeout=3)
+                        raw_msg = {}
+                        try:
+                            ws.send(json.dumps({"id": 1, "method": "Network.getAllCookies"}))
+                            for _ in range(5):
+                                msg = json.loads(ws.recv())
+                                if msg.get("id") == 1:
+                                    raw_msg = msg
+                                    break
+                        finally:
+                            ws.close()
+
+                        cookies = raw_msg.get("result", {}).get("cookies", [])
+                        yt_cookies = [
+                            c for c in cookies
+                            if "youtube.com" in c.get("domain", "")
+                        ]
+                        has_sapisid = any(
+                            c.get("name") in ("__Secure-3PAPISID", "SAPISID") and c.get("value")
+                            for c in yt_cookies
+                        )
+                        has_sid = any(
+                            c.get("name") in ("SID", "__Secure-3PSID", "LOGIN_INFO") and c.get("value")
+                            for c in yt_cookies
+                        )
+
+                        if has_sapisid and has_sid:
+                            cookie_pairs = [f"{c['name']}={c['value']}" for c in yt_cookies]
+                            cookie_str = "; ".join(cookie_pairs)
+                            self._save_auth_cookie_string(cookie_str)
+                            _kill_process_tree(proc.pid)
+                            self.reload_client()
+                            return {"status": "success", "message": "Accesso completato con successo!"}
+                except Exception:
+                    pass
+
+                if cancel_event:
+                    cancel_event.wait(1.0)
+                else:
+                    time.sleep(1.0)
+
+            _kill_process_tree(proc.pid)
+            raise TimeoutError("Tempo scaduto per l'accesso (timeout 3 minuti).")
+        finally:
+            if proc.poll() is None:
+                _kill_process_tree(proc.pid)
+
+    def get_user_playlists(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Recupera le playlist personali dell'utente dall'account connesso."""
+        client = self._client()
+        if not self.is_authenticated or client is None:
+            return []
+        try:
+            raw = client.get_library_playlists(limit=limit)
+            playlists = []
+            for item in raw:
+                pid = item.get("playlistId")
+                if not pid:
+                    continue
+                thumbs = item.get("thumbnails") or []
+                thumb = thumbs[-1].get("url", "") if thumbs else ""
+                playlists.append({
+                    "playlistId": pid,
+                    "title": item.get("title", "La mia playlist"),
+                    "count": item.get("count", ""),
+                    "thumbnail": thumb,
+                    "url": f"https://music.youtube.com/playlist?list={pid}",
+                })
+            return playlists
+        except Exception as e:
+            print(f"[Music] Errore lettura playlist personali: {e}")
+            return []
 
     @staticmethod
     def _format_ytm_item(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -400,16 +715,40 @@ class MusicService:
     # ------------------------------------------------------- libreria locale
     @staticmethod
     def local_tracks(mood_id: str) -> List[Dict[str, Any]]:
+        candidates: List[Path] = []
         folder = LOCAL_MUSIC_DIR / mood_id
-        if not folder.exists():
-            return []
-        files = [p for p in folder.rglob("*") if p.suffix.lower() in LOCAL_EXTS]
-        random.shuffle(files)
-        return [{"local_path": str(p), "title": p.stem, "artist": "Libreria locale", "source": "local", "thumbnail": ""} for p in files]
+        if folder.exists():
+            candidates = [p for p in folder.rglob("*") if p.is_file() and p.suffix.lower() in LOCAL_EXTS]
+        if not candidates and LOCAL_MUSIC_DIR.exists():
+            candidates = [p for p in LOCAL_MUSIC_DIR.rglob("*") if p.is_file() and p.suffix.lower() in LOCAL_EXTS]
+        random.shuffle(candidates)
+        return [
+            {
+                "local_path": str(p),
+                "title": p.stem,
+                "artist": "Libreria locale",
+                "source": "local",
+                "thumbnail": "",
+            }
+            for p in candidates
+        ]
 
     def resolve_playable(self, track: Dict[str, Any], tone_profile: str = "") -> Dict[str, Any]:
         """Restituisce {uri, duration, http_headers, skip_segments} per qualsiasi tipo di brano."""
         if track.get("local_path"):
-            return {"uri": track["local_path"], "duration": 0.0, "http_headers": {}, "skip_segments": []}
+            return {
+                "uri": track["local_path"],
+                "title": track.get("title", "Traccia locale"),
+                "artist": track.get("artist", "Libreria locale"),
+                "duration": float(track.get("duration_seconds", 0.0)),
+                "http_headers": {},
+                "skip_segments": [],
+                "cached": True,
+            }
         vid = self.resolve_to_video_id(track, tone_profile)
-        return self.ytdlp.resolve_stream(vid)
+        res = self.ytdlp.resolve_stream(vid)
+        if not res.get("title") and track.get("title"):
+            res["title"] = track["title"]
+        if not res.get("artist") and track.get("artist"):
+            res["artist"] = track["artist"]
+        return res

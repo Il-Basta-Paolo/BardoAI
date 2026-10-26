@@ -5,7 +5,11 @@ Test per storage.py e config_defaults.py:
 - Preservazione delle personalizzazioni utente
 - SecretVault con keyring e assenza di plaintext delle API key nel config.json
 - Scrittura atomica
+
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
+
+__author__ = "Paolo Basta"
 
 import json
 from pathlib import Path

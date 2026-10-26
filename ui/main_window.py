@@ -1,5 +1,5 @@
 """
-Finestra Principale di Bardo AI v2.6.2 (MainWindow) in PySide6.
+Finestra Principale di Bardo AI v2.6.3 (MainWindow) in PySide6.
 Collega l'interfaccia grafica modulare con il Director, l'AudioEngine,
 il MusicService, il ContinuousVoiceListener e l'SFXManager.
 Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
@@ -16,6 +16,7 @@ from typing import Any, Dict, Optional
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -32,7 +33,7 @@ from PySide6.QtWidgets import (
 
 from analyzer import SceneAnalyzer
 from audio_engine import AudioEngine, MusicSource
-from config_defaults import list_available_profiles
+from config_defaults import APP_VERSION, list_available_profiles
 from director import Director, SceneDecision
 from music_service import MusicService
 from sfx_manager import SFXManager
@@ -61,7 +62,7 @@ class EventBridge(QObject):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Bardo AI v2.6.2 — Regia Musicale Intelligente & Soundboard GdR")
+        self.setWindowTitle(f"Bardo AI v{APP_VERSION} — Regia Musicale Intelligente & Soundboard GdR")
         self.resize(1120, 800)
         self.setMinimumSize(960, 680)
 
@@ -113,13 +114,18 @@ class MainWindow(QMainWindow):
         saved_output_dev = self.config.get("audio", {}).get("output_device", None)
         if saved_output_dev is not None:
             self.audio_engine.set_output_device(saved_output_dev)
-        music_vol = int(self.config.get("audio", {}).get("music_volume", 75))
-        sfx_vol = int(self.config.get("audio", {}).get("sfx_volume", 80))
+        music_vol = int(
+            self.config.get("audio", {}).get("master_volume", self.config.get("audio", {}).get("music_volume", 75))
+        )
+        sfx_vol = int(
+            self.config.get("sfx", {}).get("volume", self.config.get("audio", {}).get("sfx_volume", 80))
+        )
         self.audio_engine.set_music_volume(music_vol)
         self.audio_engine.set_sfx_volume(sfx_vol)
 
         # YtDlp e Music Service
-        self.ytdlp_mgr = YtDlpManager()
+        self.ytdlp_mgr = YtDlpManager(status_cb=lambda s: self.bridge.sig_status.emit(s))
+        self.ytdlp_mgr.ensure_ready_async()
         self.music_service = MusicService(self.ytdlp_mgr)
 
         # SFX Manager
@@ -151,17 +157,19 @@ class MainWindow(QMainWindow):
     def _build_ui(self) -> None:
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        root_layout = QVBoxLayout(central_widget)
-        root_layout.setContentsMargins(14, 12, 14, 12)
-        root_layout.setSpacing(10)
+        self.root_layout = QVBoxLayout(central_widget)
+        self.root_layout.setContentsMargins(14, 12, 14, 12)
+        self.root_layout.setSpacing(10)
 
-        # 1. Barra Superiore (Header)
-        top_bar = QHBoxLayout()
+        # 1. Barra Superiore (Header racchiusa in un widget per il PiP)
+        self.top_bar_widget = QWidget()
+        top_bar = QHBoxLayout(self.top_bar_widget)
+        top_bar.setContentsMargins(0, 0, 0, 0)
         top_bar.setSpacing(12)
 
         lbl_app = QLabel("BARDO AI")
         lbl_app.setObjectName("headerTitle")
-        lbl_v2 = QLabel("v2.6.2")
+        lbl_v2 = QLabel(f"v{APP_VERSION}")
         lbl_v2.setStyleSheet("font-size: 11px; background-color: #3b82f6; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold;")
         top_bar.addWidget(lbl_app)
         top_bar.addWidget(lbl_v2)
@@ -220,7 +228,7 @@ class MainWindow(QMainWindow):
         self.btn_help.setMenu(self.menu_help)
         top_bar.addWidget(self.btn_help)
 
-        root_layout.addLayout(top_bar)
+        self.root_layout.addWidget(self.top_bar_widget)
 
         # 2. Area Centrale (Splitter: Atmosfere in alto, Soundboard in basso)
         self.splitter = QSplitter(Qt.Vertical)
@@ -250,21 +258,29 @@ class MainWindow(QMainWindow):
 
         self.splitter.setStretchFactor(0, 5)
         self.splitter.setStretchFactor(1, 4)
-        root_layout.addWidget(self.splitter)
+        self.root_layout.addWidget(self.splitter)
 
         # 3. Widget Monitoraggio Vocale
         self.voice_monitor = VoiceMonitorWidget()
         init_gate = int(self.config.get("stt", {}).get("gate_threshold", 20))
         self.voice_monitor.set_gate_threshold(init_gate)
         self.voice_monitor.populate_devices(ContinuousVoiceListener.get_input_devices())
-        root_layout.addWidget(self.voice_monitor)
+        self.root_layout.addWidget(self.voice_monitor)
 
         # 4. Barra di Trasporto Audio
         self.transport = TransportBar()
+        music_vol = int(
+            self.config.get("audio", {}).get("master_volume", self.config.get("audio", {}).get("music_volume", 75))
+        )
+        sfx_vol = int(
+            self.config.get("sfx", {}).get("volume", self.config.get("audio", {}).get("sfx_volume", 80))
+        )
+        self.transport.set_music_volume(music_vol)
+        self.transport.set_sfx_volume(sfx_vol)
         self.transport.populate_output_devices(AudioEngine.get_output_devices())
         saved_out = self.config.get("audio", {}).get("output_device", None)
         self.transport.select_device(saved_out)
-        root_layout.addWidget(self.transport)
+        self.root_layout.addWidget(self.transport)
 
     # ================================================================ Signal Wiring
     def _connect_signals(self) -> None:
@@ -282,15 +298,18 @@ class MainWindow(QMainWindow):
         # Voice Monitor
         self.voice_monitor.device_changed.connect(self.voice_listener.set_device)
         self.voice_monitor.mic_toggled.connect(self._on_mic_toggle_clicked)
+        self.voice_monitor.mic_toggled.connect(self.transport.set_mic_active)
         self.voice_monitor.threshold_changed.connect(self._on_gate_threshold_changed)
 
         # Transport Bar
         self.transport.play_pause_clicked.connect(self._on_play_pause)
         self.transport.skip_clicked.connect(self._on_skip_track)
-        self.transport.music_volume_changed.connect(self.audio_engine.set_music_volume)
-        self.transport.sfx_volume_changed.connect(self.audio_engine.set_sfx_volume)
+        self.transport.music_volume_changed.connect(self._on_music_volume_changed)
+        self.transport.sfx_volume_changed.connect(self._on_sfx_volume_changed)
         self.transport.lock_toggled.connect(self.director.set_locked)
         self.transport.output_device_changed.connect(self._on_output_device_changed)
+        self.transport.restore_clicked.connect(self._exit_floating_mode)
+        self.transport.mic_toggled.connect(self.voice_monitor.btn_mic_toggle.setChecked)
 
         # Event Bridge (Thread-Safe UI Updates)
         self.bridge.sig_transcript.connect(self.voice_monitor.set_transcript)
@@ -342,46 +361,80 @@ class MainWindow(QMainWindow):
         mood_data = profile.get("moods", {}).get(mood_id, {})
         tone = mood_data.get("tone_profile", "soundtrack")
 
-        # Risolve la traccia (cache, YouTube Music o fallback locale)
-        track = None
-        # 1. Prova seed tracks
-        seed_tracks = mood_data.get("seed_tracks", [])
-        if seed_tracks:
-            import random
-            track = random.choice(seed_tracks)
+        try:
+            track = None
+            # 1. Prova seed tracks
+            seed_tracks = mood_data.get("seed_tracks", [])
+            if seed_tracks:
+                import random
+                track = random.choice(seed_tracks)
 
-        if not track:
-            # 2. Cerca tramite query
-            queries = mood_data.get("queries", [f"{mood_id} soundtrack instrumental"])
-            query = custom_query or queries[0]
-            tracks = self.music_service.search_tracks(query, limit=5, tone_profile=tone)
-            if tracks:
-                track = tracks[0]
+            if not track:
+                # 2. Cerca tramite query
+                queries = mood_data.get("queries", [f"{mood_id} soundtrack instrumental"])
+                query = custom_query or queries[0]
+                tracks = self.music_service.search_tracks(query, limit=5, tone_profile=tone)
+                if tracks:
+                    track = tracks[0]
 
-        if not self.director.is_current(generation) or not track:
-            return
+            if not self.director.is_current(generation):
+                return
 
-        resolved = self.music_service.resolve_playable(track, tone_profile=tone)
-        if not self.director.is_current(generation):
-            return
+            resolved = None
+            if track:
+                try:
+                    resolved = self.music_service.resolve_playable(track, tone_profile=tone)
+                except Exception as e_res:
+                    print(f"[MusicWorker] Risoluzione traccia online fallita ({e_res}), provo fallback locale...")
+                    resolved = None
 
-        audio_url = resolved.get("audio_url")
-        if not audio_url:
-            return
+            # Fallback su tracce locali se lo stream online non è risolvibile
+            if not resolved or not (resolved.get("uri") or resolved.get("audio_url")):
+                local_candidates = self.music_service.local_tracks(mood_id)
+                if local_candidates:
+                    chosen_local = local_candidates[0]
+                    track = chosen_local
+                    resolved = self.music_service.resolve_playable(chosen_local, tone_profile=tone)
+                    try:
+                        self.bridge.sig_status.emit(f"📁 Uso musica locale: {resolved.get('title', 'Brano')}")
+                    except (RuntimeError, Exception):
+                        pass
 
-        title = resolved.get("title", "Traccia")
-        artist = resolved.get("artist", "")
-        duration = float(resolved.get("duration", 180))
+            if not self.director.is_current(generation) or not resolved:
+                return
 
-        source = MusicSource(
-            url=audio_url,
-            title=title,
-            artist=artist,
-            duration=duration,
-        )
-        crossfade = float(self.config.get("audio", {}).get("crossfade_seconds", 4.0))
-        self.audio_engine.play(source, crossfade_seconds=crossfade)
-        self.bridge.sig_track_started.emit(title, artist)
+            audio_uri = resolved.get("uri") or resolved.get("audio_url")
+            if not audio_uri:
+                try:
+                    self.bridge.sig_status.emit(f"⚠️ Nessun audio disponibile per '{mood_id}'")
+                except (RuntimeError, Exception):
+                    pass
+                return
+
+            title = resolved.get("title") or (track.get("title", "Traccia") if track else "Traccia")
+            artist = resolved.get("artist") or (track.get("artist", "") if track else "")
+            duration = float(resolved.get("duration") or (track.get("duration_seconds", 180) if track else 180))
+
+            source = MusicSource(
+                uri=audio_uri,
+                title=title,
+                duration=duration,
+                http_headers=resolved.get("http_headers", {}),
+                skip_segments=resolved.get("skip_segments", []),
+            )
+            crossfade = float(self.config.get("audio", {}).get("crossfade_seconds", 4.0))
+            self.audio_engine.play(source, crossfade_seconds=crossfade)
+            try:
+                self.bridge.sig_track_started.emit(title, artist)
+                self.bridge.sig_status.emit(f"▶️ In riproduzione: {title}")
+            except (RuntimeError, Exception):
+                pass
+        except Exception as e:
+            print(f"[MusicWorker] Errore riproduzione scena {mood_id}: {e}")
+            try:
+                self.bridge.sig_status.emit(f"⚠️ Errore riproduzione ({mood_id}): {e}")
+            except (RuntimeError, Exception):
+                pass
 
     # ================================================================ Transport Controls
     def _setup_shortcuts(self) -> None:
@@ -420,6 +473,20 @@ class MainWindow(QMainWindow):
     def _on_volume_down(self) -> None:
         """Abbassa il volume della musica del 5% (Ctrl+Giù)."""
         self.transport.step_music_volume(-5)
+
+    def _on_music_volume_changed(self, vol: int) -> None:
+        """Riceve la modifica del volume musica dallo slider e aggiorna audio engine e configurazione."""
+        self.audio_engine.set_music_volume(vol)
+        if "audio" not in self.config or not isinstance(self.config["audio"], dict):
+            self.config["audio"] = {}
+        self.config["audio"]["master_volume"] = vol
+
+    def _on_sfx_volume_changed(self, vol: int) -> None:
+        """Riceve la modifica del volume SFX dallo slider e aggiorna audio engine e configurazione."""
+        self.audio_engine.set_sfx_volume(vol)
+        if "sfx" not in self.config or not isinstance(self.config["sfx"], dict):
+            self.config["sfx"] = {}
+        self.config["sfx"]["volume"] = vol
 
     def _on_mood_button_clicked(self, mood_id: str) -> None:
         self.director.manual_select(mood_id)
@@ -544,7 +611,7 @@ class MainWindow(QMainWindow):
                 self.combo_profile.blockSignals(False)
 
         self.director.reset()
-        profile = self.config["profiles"].get(profile_id, {})
+        profile = self.config.get("profiles", {}).get(profile_id, {})
         moods = profile.get("moods", {})
         self.mood_grid.populate(moods)
 
@@ -554,12 +621,24 @@ class MainWindow(QMainWindow):
             self.director.manual_select(first_mood)
 
     def _open_settings(self) -> None:
-        dlg = SettingsDialog(self.config, self)
-        if dlg.exec() == QDialog.Accepted:
+        dlg = SettingsDialog(self.config, self, music_service=self.music_service)
+        res = dlg.exec()
+        self.music_service.reload_client()
+        if res == QDialog.Accepted:
             self.config = ConfigManager.load()
             self.director.configure(self.config.get("analyzer", {}))
-            self.audio_engine.set_music_volume(int(self.config.get("audio", {}).get("music_volume", 75)))
-            self.audio_engine.set_sfx_volume(int(self.config.get("audio", {}).get("sfx_volume", 80)))
+            music_vol = int(
+                self.config.get("audio", {}).get("master_volume", self.config.get("audio", {}).get("music_volume", 75))
+            )
+            sfx_vol = int(
+                self.config.get("sfx", {}).get("volume", self.config.get("audio", {}).get("sfx_volume", 80))
+            )
+            self.audio_engine.set_music_volume(music_vol)
+            self.audio_engine.set_sfx_volume(sfx_vol)
+            self.transport.set_music_volume(music_vol)
+            self.transport.set_sfx_volume(sfx_vol)
+            if self.music_service.is_authenticated:
+                self.bridge.sig_status.emit("🟢 YouTube Music collegato.")
 
     def _open_shortcuts_dialog(self) -> None:
         """Apre la finestra di dialogo con l'elenco delle scorciatoie da tastiera (F1)."""
@@ -579,7 +658,7 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             "Informazioni su Bardo AI",
-            "<h3>Bardo AI v2.6.2</h3>"
+            f"<h3>Bardo AI v{APP_VERSION}</h3>"
             "<p><b>Regia musicale autonoma ed effetti sonori vocali per sessioni GdR</b></p>"
             "<p>Autore: <b>Paolo Basta</b> (<a href='https://github.com/Il-Basta-Paolo'>@Il-Basta-Paolo</a>)<br>"
             "Repository: <a href='https://github.com/Il-Basta-Paolo/BardoAI'>github.com/Il-Basta-Paolo/BardoAI</a><br>"
@@ -652,18 +731,25 @@ class MainWindow(QMainWindow):
         self.is_floating = True
         self._normal_geometry = self.geometry()
 
-        # Nasconde la sezione centrale (griglia atmosfere e soundboard)
+        # Nasconde tutti gli elementi non essenziali per il mini-player
+        self.top_bar_widget.hide()
         self.splitter.hide()
+        self.voice_monitor.hide()
+
+        # Attiva la modalità compatta sul transport bar
+        self.transport.set_compact_mode(True)
+        self.root_layout.setContentsMargins(6, 6, 6, 6)
+        self.root_layout.setSpacing(0)
 
         # Consente il ridimensionamento a dimensioni compatte da mini-player
-        self.setMinimumSize(480, 160)
-        self.resize(520, 180)
+        self.setMinimumSize(460, 76)
+        self.resize(540, 84)
 
         # Sposta la finestra in basso a destra nello schermo corrente
         screen = self.screen().availableGeometry() if self.screen() else None
         if screen:
-            new_x = screen.right() - 520 - 24
-            new_y = screen.bottom() - 180 - 48
+            new_x = screen.right() - 540 - 24
+            new_y = screen.bottom() - 84 - 48
             self.move(new_x, new_y)
 
         # Applica il flag Always-on-Top senza rubare il focus all'applicazione attiva
@@ -681,9 +767,16 @@ class MainWindow(QMainWindow):
         self.setAttribute(Qt.WA_ShowWithoutActivating, False)
         self.setWindowFlag(Qt.WindowStaysOnTopHint, False)
 
-        # Ripristina la dimensione minima standard e mostra la griglia
+        # Ripristina margini e spaziatura standard
+        self.root_layout.setContentsMargins(14, 12, 14, 12)
+        self.root_layout.setSpacing(10)
+
+        # Ripristina la dimensione minima standard e mostra tutti i componenti
         self.setMinimumSize(960, 680)
+        self.top_bar_widget.show()
         self.splitter.show()
+        self.voice_monitor.show()
+        self.transport.set_compact_mode(False)
 
         # Ripristina la geometria precedente
         if self._normal_geometry:
@@ -697,7 +790,12 @@ class MainWindow(QMainWindow):
         """Intercetta il cambio di attivazione della finestra per l'Auto-Float PiP."""
         if event.type() == QEvent.ActivationChange:
             if not self.isActiveWindow():
-                if self.auto_float_enabled and not self.is_floating:
+                if (
+                    self.auto_float_enabled
+                    and not self.is_floating
+                    and not self.isMinimized()
+                    and QApplication.activeModalWidget() is None
+                ):
                     self._enter_floating_mode()
             else:
                 if self.is_floating:
@@ -705,6 +803,9 @@ class MainWindow(QMainWindow):
         super().changeEvent(event)
 
     def closeEvent(self, event) -> None:
+        self._is_closing = True
+        self.director.reset()
         self.voice_listener.stop()
         self.audio_engine.shutdown()
+        ConfigManager.save(self.config)
         event.accept()

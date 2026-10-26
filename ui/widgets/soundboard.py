@@ -1,10 +1,13 @@
 """
-Soundboard interattiva a categorie con supporto per effetti personalizzati illimitati in PySide6.
+Soundboard interattiva a categorie con supporto per effetti personalizzati illimitati in PySide6 per Bardo AI.
 Risolve il bug #12 di bastaaaa.md (mostra tutti gli effetti, non solo i primi 20).
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
@@ -23,6 +26,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+__author__ = "Paolo Basta"
+
 
 class SearchLineEdit(QLineEdit):
     """Casella di ricerca rapida con gestione avanzata del tasto Escape."""
@@ -40,7 +45,7 @@ class SFXButton(QFrame):
     triggered = Signal(str)
     delete_requested = Signal(str)
 
-    def __init__(self, sfx_data: Dict[str, Any], parent: QWidget = None) -> None:
+    def __init__(self, sfx_data: Dict[str, Any], parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.sfx_id = sfx_data.get("id", "")
         self.is_custom = bool(sfx_data.get("custom", False))
@@ -90,7 +95,7 @@ class SFXButton(QFrame):
 class AddCustomSFXDialog(QDialog):
     """Dialog per aggiungere un SFX personalizzato senza errori di permessi."""
 
-    def __init__(self, parent: QWidget = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Aggiungi Effetto Sonoro Personalizzato")
         self.setFixedSize(420, 280)
@@ -168,7 +173,7 @@ class SoundboardWidget(QWidget):
     custom_sfx_added = Signal(dict)
     custom_sfx_deleted = Signal(str)
 
-    def __init__(self, parent: QWidget = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._sfx_library: Dict[str, Any] = {}
         self._category_buttons: Dict[str, list] = {}

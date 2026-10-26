@@ -3,7 +3,7 @@
 [![Tests](https://github.com/Il-Basta-Paolo/BardoAI/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/Il-Basta-Paolo/BardoAI/actions/workflows/tests.yml)
 [![Release](https://img.shields.io/github/v/release/Il-Basta-Paolo/BardoAI?color=10b981&label=Release)](https://github.com/Il-Basta-Paolo/BardoAI/releases/latest)
 [![Coverage](https://img.shields.io/badge/Coverage-58%25-yellow.svg)](tests/)
-[![Changelog](https://img.shields.io/badge/Changelog-v2.6.2-blue)](CHANGELOG.md)
+[![Changelog](https://img.shields.io/badge/Changelog-v2.6.3-blue)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 
 **Regia musicale automatica ed effetti sonori vocali per sessioni GdR**
@@ -13,7 +13,7 @@ Quando fai il Dungeon Master al tavolo o su Discord, gestire la colonna sonora �
 **Bardo AI** è un progetto realizzato in vibecoding che risolve questo problema: ascolta la tua voce mentre narri in italiano, capisce cosa sta succedendo al tavolo e adatta la musica e gli effetti sonori in tempo reale, senza che tu debba toccare il mouse.
 
 <p align="center">
-  <img src="docs/screenshots/bardo_ui.png" alt="Interfaccia Desktop di Bardo AI v2.6.2" width="850"/>
+  <img src="docs/screenshots/bardo_ui.png" alt="Interfaccia Desktop di Bardo AI v2.6.3" width="850"/>
 </p>
 
 ---
@@ -40,15 +40,13 @@ Quando fai il Dungeon Master al tavolo o su Discord, gestire la colonna sonora �
 
 ---
 
-## Novità dell'ultima versione (v2.6.2)
+## Novità dell'ultima versione (v2.6.3)
 
-- **VU-Meter dinamico con Noise Gate regolabile a trascinamento**: visualizzazione in tempo reale del livello microfonico nell'header. Un indicatore interattivo permette di calibrare la soglia di ascolto trascinandola comodamente con il mouse: quando la voce supera la tacca il monitor si accende di verde e il comando viene elaborato, escludendo il brusio del tavolo o rumori ambientali. La regolazione viene memorizzata automaticamente.
-- **Selettore a caldo del dispositivo audio di uscita**: menu a tendina nella barra di trasporto per instradare musica ed effetti su cuffie, casse o periferiche audio virtuali (Voicemeeter, VB-Cable per Discord) al volo, senza riavviare l'applicazione o toccare i dispositivi predefiniti di Windows.
-- **Modalità Auto-Float (Picture-in-Picture)**: quando il Master sposta il focus su altre finestre (appunti, manuale PDF o VTT), Bardo AI si contrae automaticamente in una barra compatta Always-on-Top con i comandi essenziali (microfono, traccia, volume, atmosfera corrente), ripristinandosi a schermo intero quando richiamata.
-- **Barra di ricerca istantanea nella Soundboard**: casella di ricerca rapida con filtro in tempo reale per trovare al volo qualsiasi suono per nome o parole chiave. Se ci si trova in una categoria specifica, la digitazione passa in automatico alla vista "Tutti", e con il tasto `Esc` la ricerca si azzera all'istante.
-- **Scorciatoie globali da tastiera e guida rapida (F1)**: controlli veloci per gestire la sessione senza staccare le mani dalla tastiera (`Spazio` o `Ctrl+M` per silenziare/ascoltare il microfono, frecce `Su`/`Giù` per il volume, `Ctrl+N` per forzare il cambio brano) e finestra di aiuto interattiva richiamabile con `F1`.
-- **Esportazione e importazione profili di campagna (`.bardo.json`)**: pulsanti dedicati per salvare e condividere interi profili personalizzati in singoli file compatti, con gestione e risoluzione automatica delle collisioni di ID per proteggere i profili già presenti.
-- **Isolamento thread vocali e stabilità audio**: perfezionata la gestione della pipeline STT locale e la chiusura sicura dei thread native C in background, garantendo massima stabilità del mixer anche dopo ore continuative di sessione.
+- **Integrazione YouTube Music con Accesso Rapido (1 Clic)**: nuovo sistema di collegamento sicuro tramite finestra browser dedicata per accedere alle proprie playlist personali e preferiti direttamente da YouTube Music, salvando le credenziali di sessione in locale e bypassando qualsiasi restrizione d'accesso ospite.
+- **Scheda Intelligenza Artificiale Dinamica e 100% Locale di Default**: interfaccia impostazioni riorganizzata con selettore dinamico che mostra solo i campi pertinenti al provider scelto. La modalità predefinita opera al 100% offline tramite regole semantiche italiane e modelli vocali locali (Vosk/Whisper), senza richiedere API key esterne o invio di dati sul cloud.
+- **Mini-Player Auto-Float PiP Perfezionato**: layout compatto ottimizzato (540x84) ad altissima leggibilità con controlli essenziali (tasto rapido microfono, volume e ripristino) e protezione attiva da finestre di dialogo modali o minimizzazione a barra delle applicazioni.
+- **Sincronizzazione Bidirezionale dei Volumi**: allineamento persistente dei livelli audio di musica ed effetti sonori tra configurazione, audio engine e slider della barra di trasporto.
+- **Armonizzazione Globale del Codice e Robustezza Packaging**: inclusione deterministica di tutte le finestre di dialogo nel bundle di compilazione PyInstaller (BardoAI.spec), gestione sicura dei thread di riproduzione alla chiusura e isolamento completo del Credential Manager di Windows nei test unitari.
 
 <details>
 <summary><b>Visualizza le novità delle release precedenti (v2.6.1 e v2.6.0)</b></summary>

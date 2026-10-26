@@ -1,8 +1,11 @@
 """
-Barra di controllo della riproduzione musicale (Transport Bar) in PySide6.
+Barra di controllo della riproduzione musicale (Transport Bar) in PySide6 per Bardo AI.
 Include controlli per play/pause, cambio traccia, volume musica e SFX,
-blocco scena e indicatore cooldown.
+blocco scena, selezione dispositivi di uscita audio e modalità mini-player.
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
+
+from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 from PySide6.QtCore import Qt, Signal
@@ -17,6 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+__author__ = "Paolo Basta"
+
 
 class TransportBar(QFrame):
     play_pause_clicked = Signal()
@@ -25,15 +30,17 @@ class TransportBar(QFrame):
     sfx_volume_changed = Signal(int)
     lock_toggled = Signal(bool)
     output_device_changed = Signal(object)  # Optional[int]
+    restore_clicked = Signal()
+    mic_toggled = Signal(bool)
 
-    def __init__(self, parent: QWidget = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("card")
         self.setFixedHeight(82)
 
-        main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(16, 10, 16, 10)
-        main_layout.setSpacing(16)
+        self._main_layout = QHBoxLayout(self)
+        self._main_layout.setContentsMargins(16, 10, 16, 10)
+        self._main_layout.setSpacing(16)
 
         # 1. Info Brano in Riproduzione (Sinistra)
         track_info_box = QVBoxLayout()
@@ -48,13 +55,13 @@ class TransportBar(QFrame):
 
         track_info_box.addWidget(self.track_title_label)
         track_info_box.addWidget(self.track_artist_label)
-        main_layout.addLayout(track_info_box)
+        self._main_layout.addLayout(track_info_box)
 
-        # Separatore verticale
-        sep1 = QFrame()
-        sep1.setFrameShape(QFrame.VLine)
-        sep1.setStyleSheet("color: #1e293b;")
-        main_layout.addWidget(sep1)
+        # Separatore verticale 1
+        self.sep1 = QFrame()
+        self.sep1.setFrameShape(QFrame.VLine)
+        self.sep1.setStyleSheet("color: #1e293b;")
+        self._main_layout.addWidget(self.sep1)
 
         # 2. Pulsanti Trasporto (Centro-Sinistra)
         ctrl_layout = QHBoxLayout()
@@ -74,10 +81,12 @@ class TransportBar(QFrame):
 
         ctrl_layout.addWidget(self.btn_play_pause)
         ctrl_layout.addWidget(self.btn_skip)
-        main_layout.addLayout(ctrl_layout)
+        self._main_layout.addLayout(ctrl_layout)
 
         # 3. Slider Volume Musica (Centro)
-        vol_music_box = QVBoxLayout()
+        self.vol_music_container = QWidget()
+        vol_music_box = QVBoxLayout(self.vol_music_container)
+        vol_music_box.setContentsMargins(0, 0, 0, 0)
         vol_music_box.setSpacing(2)
         lbl_music_hdr = QHBoxLayout()
         lbl_music_hdr.addWidget(QLabel("🎵 Musica"))
@@ -95,10 +104,12 @@ class TransportBar(QFrame):
 
         vol_music_box.addLayout(lbl_music_hdr)
         vol_music_box.addWidget(self.slider_music)
-        main_layout.addLayout(vol_music_box)
+        self._main_layout.addWidget(self.vol_music_container)
 
         # 4. Slider Volume SFX (Centro-Destra)
-        vol_sfx_box = QVBoxLayout()
+        self.vol_sfx_container = QWidget()
+        vol_sfx_box = QVBoxLayout(self.vol_sfx_container)
+        vol_sfx_box.setContentsMargins(0, 0, 0, 0)
         vol_sfx_box.setSpacing(2)
         lbl_sfx_hdr = QHBoxLayout()
         lbl_sfx_hdr.addWidget(QLabel("💥 SFX"))
@@ -115,10 +126,12 @@ class TransportBar(QFrame):
 
         vol_sfx_box.addLayout(lbl_sfx_hdr)
         vol_sfx_box.addWidget(self.slider_sfx)
-        main_layout.addLayout(vol_sfx_box)
+        self._main_layout.addWidget(self.vol_sfx_container)
 
         # 4.5 Selettore Dispositivo di Uscita Audio (Cuffie / Casse / Virtual Cable)
-        out_dev_box = QVBoxLayout()
+        self.out_dev_container = QWidget()
+        out_dev_box = QVBoxLayout(self.out_dev_container)
+        out_dev_box.setContentsMargins(0, 0, 0, 0)
         out_dev_box.setSpacing(2)
         lbl_out_hdr = QLabel("🔊 Uscita Audio")
         lbl_out_hdr.setStyleSheet("color: #94a3b8; font-size: 11px;")
@@ -129,16 +142,18 @@ class TransportBar(QFrame):
         self.device_combo.currentIndexChanged.connect(self._on_device_selected)
         out_dev_box.addWidget(lbl_out_hdr)
         out_dev_box.addWidget(self.device_combo)
-        main_layout.addLayout(out_dev_box)
+        self._main_layout.addWidget(self.out_dev_container)
 
-        # Separatore verticale
-        sep2 = QFrame()
-        sep2.setFrameShape(QFrame.VLine)
-        sep2.setStyleSheet("color: #1e293b;")
-        main_layout.addWidget(sep2)
+        # Separatore verticale 2
+        self.sep2 = QFrame()
+        self.sep2.setFrameShape(QFrame.VLine)
+        self.sep2.setStyleSheet("color: #1e293b;")
+        self._main_layout.addWidget(self.sep2)
 
         # 5. Pulsante Lock Regia e Badge Cooldown (Destra)
-        lock_box = QVBoxLayout()
+        self.lock_container = QWidget()
+        lock_box = QVBoxLayout(self.lock_container)
+        lock_box.setContentsMargins(0, 0, 0, 0)
         lock_box.setSpacing(4)
 
         self.btn_lock = QPushButton("🔓 Sbloccato")
@@ -153,7 +168,28 @@ class TransportBar(QFrame):
 
         lock_box.addWidget(self.btn_lock)
         lock_box.addWidget(self.lbl_cooldown)
-        main_layout.addLayout(lock_box)
+        self._main_layout.addWidget(self.lock_container)
+
+        # 6. Controlli dedicati al Mini-Player PiP (Nascosti in vista estesa)
+        self.btn_mic_quick = QPushButton("🎙️")
+        self.btn_mic_quick.setToolTip("Attiva / Disattiva Microfono Vocale (Ctrl+M)")
+        self.btn_mic_quick.setFixedSize(36, 36)
+        self.btn_mic_quick.setCheckable(True)
+        self.btn_mic_quick.setChecked(True)
+        self.btn_mic_quick.setStyleSheet("font-size: 16px; border-radius: 18px; background-color: #10b981; color: white;")
+        self.btn_mic_quick.toggled.connect(self._on_quick_mic_toggled)
+        self.btn_mic_quick.hide()
+        self._main_layout.addWidget(self.btn_mic_quick)
+
+        self.btn_restore = QPushButton("⤢")
+        self.btn_restore.setToolTip("Ripristina finestra intera (Ctrl+F11)")
+        self.btn_restore.setFixedSize(36, 36)
+        self.btn_restore.setStyleSheet(
+            "font-size: 16px; font-weight: bold; border-radius: 18px; background-color: #334155; color: #f8fafc;"
+        )
+        self.btn_restore.clicked.connect(self.restore_clicked.emit)
+        self.btn_restore.hide()
+        self._main_layout.addWidget(self.btn_restore)
 
     def populate_output_devices(self, devices: List[Dict[str, Any]]) -> None:
         """Popola il menu a tendina delle uscite audio senza emettere segnali spuri."""
@@ -197,6 +233,7 @@ class TransportBar(QFrame):
     def update_track(self, title: str, artist: str = "") -> None:
         self.track_title_label.setText(title or "Traccia audio")
         self.track_artist_label.setText(artist or "Bardo AI")
+        self.btn_play_pause.setText("⏸")
 
     def set_playing_state(self, is_playing: bool) -> None:
         self.btn_play_pause.setText("⏸" if is_playing else "▶")
@@ -214,3 +251,71 @@ class TransportBar(QFrame):
         new_val = max(0, min(100, self.slider_music.value() + delta))
         self.slider_music.setValue(new_val)
         return new_val
+
+    def set_music_volume(self, vol: int) -> None:
+        """Imposta la posizione dello slider musica e aggiorna la percentuale senza emettere segnali ridondanti."""
+        val = max(0, min(100, int(vol)))
+        self.slider_music.blockSignals(True)
+        self.slider_music.setValue(val)
+        self.lbl_music_pct.setText(f"{val}%")
+        self.slider_music.blockSignals(False)
+
+    def set_sfx_volume(self, vol: int) -> None:
+        """Imposta la posizione dello slider SFX e aggiorna la percentuale senza emettere segnali ridondanti."""
+        val = max(0, min(100, int(vol)))
+        self.slider_sfx.blockSignals(True)
+        self.slider_sfx.setValue(val)
+        self.lbl_sfx_pct.setText(f"{val}%")
+        self.slider_sfx.blockSignals(False)
+
+    def set_compact_mode(self, compact: bool) -> None:
+        """Passa dalla modalità desktop estesa alla modalità compatta per Mini-Player PiP e viceversa."""
+        if compact:
+            self.setFixedHeight(72)
+            self._main_layout.setContentsMargins(12, 6, 12, 6)
+            self._main_layout.setSpacing(10)
+            self.sep1.hide()
+            self.vol_sfx_container.hide()
+            self.out_dev_container.hide()
+            self.sep2.hide()
+            self.lock_container.hide()
+            self.slider_music.setFixedWidth(100)
+            self.track_title_label.setMaximumWidth(170)
+            self.btn_mic_quick.show()
+            self.btn_restore.show()
+        else:
+            self.setFixedHeight(82)
+            self._main_layout.setContentsMargins(16, 10, 16, 10)
+            self._main_layout.setSpacing(16)
+            self.sep1.show()
+            self.vol_sfx_container.show()
+            self.out_dev_container.show()
+            self.sep2.show()
+            self.lock_container.show()
+            self.slider_music.setFixedWidth(140)
+            self.track_title_label.setMaximumWidth(280)
+            self.btn_mic_quick.hide()
+            self.btn_restore.hide()
+
+    def _on_quick_mic_toggled(self, checked: bool) -> None:
+        self._update_mic_quick_style(checked)
+        self.mic_toggled.emit(checked)
+
+    def _update_mic_quick_style(self, active: bool) -> None:
+        if active:
+            self.btn_mic_quick.setText("🎙️")
+            self.btn_mic_quick.setStyleSheet(
+                "font-size: 16px; border-radius: 18px; background-color: #10b981; color: white;"
+            )
+        else:
+            self.btn_mic_quick.setText("🔇")
+            self.btn_mic_quick.setStyleSheet(
+                "font-size: 16px; border-radius: 18px; background-color: #ef4444; color: white;"
+            )
+
+    def set_mic_active(self, active: bool) -> None:
+        """Aggiorna lo stato visivo del pulsante microfono rapido senza ri-emettere segnali."""
+        self.btn_mic_quick.blockSignals(True)
+        self.btn_mic_quick.setChecked(active)
+        self._update_mic_quick_style(active)
+        self.btn_mic_quick.blockSignals(False)

@@ -3,7 +3,11 @@ Test per music_service.py e ytmusic_service.py:
 - Filtro 'solo strumentale' a parole intere (bug #7 di bastaaaa.md):
   'Enchanted' non viene scartato per 'chant', 'Defeat' non per 'feat', 'Operation' non per 'opera', 'Beginning' non per 'inn'.
 - Costruzione query e sanitizzazione titoli
+
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
+
+__author__ = "Paolo Basta"
 
 from music_service import (
     is_instrumental_candidate,

@@ -10,7 +10,7 @@ hiddenimports = [
     'ui', 'ui.main_window', 'ui.styles',
     'ui.widgets.mood_grid', 'ui.widgets.soundboard',
     'ui.widgets.transport', 'ui.widgets.voice_monitor',
-    'ui.dialogs.settings_dialog',
+    'ui.dialogs.settings_dialog', 'ui.dialogs.shortcuts_dialog',
 ]
 
 for mod in ['ytmusicapi', '_sounddevice_data', 'keyring', 'vosk', 'ctranslate2']:

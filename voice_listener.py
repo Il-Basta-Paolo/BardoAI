@@ -1,5 +1,5 @@
 """
-Modulo di ascolto vocale continuo e Speech-to-Text (STT) 100% locale per Bardo AI v2.6.0.
+Modulo di ascolto vocale continuo e Speech-to-Text (STT) 100% locale per Bardo AI v2.6.3
 Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 Caratteristiche:
 - Streaming STT a bassissima latenza (~150-200ms) tramite Vosk per l'attivazione immediata degli SFX.

@@ -1,7 +1,10 @@
 """
-Griglia dinamica e responsiva per la selezione delle atmosfere (Moods) in PySide6.
+Griglia dinamica e responsiva per la selezione delle atmosfere (Moods) in PySide6 per Bardo AI.
 Supporta qualsiasi numero di atmosfere (>9) senza nascondere elementi (risolve bug #12 di bastaaaa.md).
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
+
+from __future__ import annotations
 
 from typing import Any, Dict, Optional
 from PySide6.QtCore import Qt, Signal
@@ -15,11 +18,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+__author__ = "Paolo Basta"
+
 
 class MoodCard(QFrame):
     clicked = Signal(str)
 
-    def __init__(self, mood_data: Dict[str, Any], parent: QWidget = None) -> None:
+    def __init__(self, mood_data: Dict[str, Any], parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.mood_id = mood_data.get("id", "")
         self.mood_color = mood_data.get("color", "#3b82f6")
@@ -77,7 +82,7 @@ class MoodCard(QFrame):
 class MoodGridWidget(QWidget):
     mood_selected = Signal(str)
 
-    def __init__(self, parent: QWidget = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._cards: Dict[str, MoodCard] = {}
         self._active_mood_id: Optional[str] = None

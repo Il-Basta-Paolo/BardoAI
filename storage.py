@@ -20,7 +20,7 @@ from typing import Dict, Any, List, Optional, Tuple
 import keyring
 from pydantic import BaseModel, Field, field_validator
 
-from config_defaults import DEFAULT_CONFIG, CONFIG_SCHEMA_VERSION
+from config_defaults import APP_VERSION, CONFIG_SCHEMA_VERSION, DEFAULT_CONFIG
 
 if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).resolve().parent
@@ -60,6 +60,7 @@ AUDIO_CACHE_DIR = DATA_DIR / "audio_cache"
 LOCAL_MUSIC_DIR = DATA_DIR / "local_music"
 MODELS_DIR = DATA_DIR / "models"
 BIN_DIR = DATA_DIR / "bin"
+YTMUSIC_AUTH_FILE = DATA_DIR / "ytmusic_auth.json"
 
 _CONFIG_LOCK = threading.RLock()
 KEYRING_SERVICE = "BardoAI_GdR_v2"
@@ -122,7 +123,7 @@ class AnalyzerSettingsModel(BaseModel):
     confidence_threshold: float = 2.2
     min_scene_duration_seconds: float = 8.0
     hysteresis_window_seconds: float = 25.0
-    ai_provider: str = "gemini"
+    ai_provider: str = "keywords"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
     ollama_url: str = "http://localhost:11434"
@@ -221,21 +222,14 @@ def ensure_data_dir() -> None:
 
 def cleanup_legacy_browser_profiles() -> None:
     """
-    Rimuove eventuali cartelle e file legacy lasciati dalla vecchia versione webapp
-    (ytm_browser_profile, spotify_browser_profile, ytmusic_auth.json, spotify_auth.json).
+    Rimuove profili temporanei obsoleti lasciati dalla vecchia versione webapp.
+    Preserva i file di autenticazione dell'utente (ytmusic_auth.json, spotify_auth.json).
     """
-    for folder_name in ("ytm_browser_profile", "spotify_browser_profile"):
+    for folder_name in ("spotify_browser_profile",):
         target = DATA_DIR / folder_name
         if target.exists():
             try:
                 shutil.rmtree(target, ignore_errors=True)
-            except Exception:
-                pass
-    for file_name in ("ytmusic_auth.json", "spotify_auth.json"):
-        f_target = DATA_DIR / file_name
-        if f_target.exists():
-            try:
-                f_target.unlink(missing_ok=True)
             except Exception:
                 pass
 
@@ -284,7 +278,7 @@ class ExportedProfilePackage(BaseModel):
 
     format: str = "bardo_profile"
     version: str = "1.0"
-    app_version: str = "2.6.1"
+    app_version: str = APP_VERSION
     exported_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     profile: Dict[str, Any]
 
@@ -610,7 +604,8 @@ def save_config(cfg: Dict[str, Any]) -> None:
             for secret_field in ("gemini_api_key", "openai_api_key"):
                 if secret_field in analyzer_sec:
                     val = (analyzer_sec.get(secret_field) or "").strip()
-                    SecretVault.set_secret(secret_field, val)
+                    if val:
+                        SecretVault.set_secret(secret_field, val)
                     analyzer_sec[secret_field] = ""
 
         atomic_write_json(CONFIG_FILE, disk_copy)

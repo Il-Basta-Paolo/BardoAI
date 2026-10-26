@@ -5,7 +5,11 @@ Test per audio_engine.py:
 - Regolazione volumi con curva psicoacustica
 - Calcolo ducking sample-accurate
 - Polyphonic SFX mixing
+
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
+
+__author__ = "Paolo Basta"
 
 import math
 from pathlib import Path

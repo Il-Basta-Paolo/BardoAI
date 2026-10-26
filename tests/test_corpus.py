@@ -2,7 +2,11 @@
 Test di Regressione su Corpus Completo di Frasi GdR (test_corpus.py).
 Valuta l'accuratezza end-to-end del classificatore di scene e dei filtri SFX
 su oltre 60 frasi realistiche pronunciate da Dungeon Master e giocatori.
+
+Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
+
+__author__ = "Paolo Basta"
 
 import pytest
 from analyzer import SceneAnalyzer
