@@ -16,7 +16,7 @@ Bardo AI è progettato per essere utilizzato durante sessioni di gioco di ruolo 
 
 ## 🔐 2. Gestione Cifrata delle Credenziali
 
-Se decidi di utilizzare integrazioni opzionali (come chiavi API Gemini, OpenAI o credenziali Spotify):
+Se decidi di utilizzare integrazioni opzionali (come chiavi API Gemini, OpenAI o sessione protetta YouTube Music):
 
 * **Windows Credential Manager**: Tutte le chiavi segrete vengono salvate nella cassaforte protetta del sistema operativo Windows tramite la libreria `keyring`.
 * **Zero Credenziali nei File di Testo**: Nessuna chiave API o token di sessione viene mai scritto in chiaro nei file di configurazione `config.json` o nei file di log.

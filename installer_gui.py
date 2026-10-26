@@ -235,7 +235,7 @@ class BardoInstallerWizard(ctk.CTk):
 
         ctk.CTkLabel(
             title_box,
-            text="Regia Musicale Automatica (Spotify & YouTube Music) + Soundboard Vocale GdR in Italiano",
+            text="Regia Musicale Automatica (YouTube Music) + Soundboard Vocale GdR in Italiano",
             font=ctk.CTkFont(size=12),
             text_color="#fbbf24",
             anchor="w",
@@ -340,9 +340,9 @@ class BardoInstallerWizard(ctk.CTk):
         features_card.pack(fill="x", pady=(0, 10))
 
         features_text = (
-            "✨  Pacchetto All-in-One (non serve installare né Python né VLC Media Player):\n"
-            "  •  Applicazione BardoAI.exe + Motore Audio LibVLC con Crossfade S-Curve integrato\n"
-            "  •  Libreria di 20 Effetti Sonori GdR rimasterizzati in Stereo 3D + Login Spotify & YT Music"
+            "✨  Pacchetto All-in-One (non serve installare Python né codec aggiuntivi):\n"
+            "  •  Applicazione BardoAI.exe + Motore Audio PyAV & sounddevice con Dissolvenze S-Curve\n"
+            "  •  Libreria di 20 Effetti Sonori GdR rimasterizzati in Stereo 3D + Accesso Rapido YouTube Music"
         )
         ctk.CTkLabel(
             features_card,

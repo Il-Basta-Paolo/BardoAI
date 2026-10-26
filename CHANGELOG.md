@@ -15,8 +15,13 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/)
 
 ### 🔄 Modificato
 - **Mini-Player Auto-Float PiP Ottimizzato**: interfaccia compatta ad alta leggibilità (540x84), arricchita di comandi essenziali (microfono rapido, volume musica compatto, pulsante di ripristino istantaneo) e protetta da falsi trigger durante l'apertura di finestre modali o minimizzazione a barra delle applicazioni.
-- **Isolamento Credential Manager nei Test**: introdotta fixture globale con mock in RAM per SecretVault in 	ests/conftest.py, proteggendo permanentemente il portachiavi di sistema di Windows durante l'esecuzione della suite automatizzata.
+- **Isolamento Credential Manager e Thread nei Test**: introdotte fixture globali con mock in RAM per SecretVault e isolamento dei processi/thread yt-dlp in tests/conftest.py, proteggendo il portachiavi di sistema di Windows ed eliminando leak di subprocess in CI.
 - **Packaging PyInstaller Deterministico**: inclusione esplicita di tutte le finestre di dialogo (shortcuts_dialog, settings_dialog) in BardoAI.spec.
+- **Aggiornamento Dipendenze di Sistema**: allineate le dipendenze `sounddevice` (>=0.5.6), `keyring` (>=25.7.0), `pydantic` (>=2.14.1), `pillow` (>=13.0.0), `onnxruntime` (>=1.31.0), `customtkinter` (>=6.0.0) e `pytest-cov` (>=7.1.0).
+- **Allineamento Testi Installer Guidato**: rimossi i riferimenti residui a Spotify nelle schermate di installazione (`installer_gui.py`) in favore di YouTube Music e del motore PyAV.
+
+### 🗑️ Rimosso
+- **Integrazione Spotify e Flusso OAuth**: dismesso interamente il client Spotify, la relativa scheda di configurazione delle credenziali sviluppatore (Client ID e Secret) e l'infrastruttura OAuth locale, in favore dell'accesso nativo e gratuito a YouTube Music.
 
 ### 🐛 Risolto
 - **Prevenzione Sovrascrittura Chiavi in ConfigManager**: corretto il comportamento di save_config evitando che salvasse stringhe vuote in SecretVault qualora le chiavi API nel dizionario non fossero valorizzate.
