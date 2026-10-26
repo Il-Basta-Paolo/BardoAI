@@ -16,6 +16,7 @@ import json
 import os
 import queue
 import threading
+import shutil
 import zipfile
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -128,6 +129,7 @@ class ContinuousVoiceListener:
         on_status: Optional[Callable[[str], None]] = None,
         on_level: Optional[Callable[[float], None]] = None,
         use_whisper: bool = True,
+        whisper_model: str = "small",
         gate_threshold: int = 20,
     ) -> None:
         self.on_transcript = on_transcript
@@ -135,6 +137,7 @@ class ContinuousVoiceListener:
         self.on_status = on_status
         self.on_level = on_level
         self.use_whisper = use_whisper
+        self.whisper_model = whisper_model or WHISPER_MODEL_SIZE
         self._gate_threshold = max(5, min(85, gate_threshold))
 
         self.selected_device_index: Optional[int] = None
@@ -173,7 +176,13 @@ class ContinuousVoiceListener:
                     self._vosk_model = vosk.Model(vpath)
                     print("[VoiceListener] Modello Vosk italiano caricato con successo.")
                 except Exception as e:
-                    print(f"[VoiceListener] Impossibile caricare Vosk: {e}")
+                    print(f"[VoiceListener] Impossibile caricare Vosk (modello corrotto o incompleto): {e}")
+                    shutil.rmtree(ModelManager.get_vosk_model_dir(), ignore_errors=True)
+                    print("[VoiceListener] Cartella modello rimossa. Avvio nuovo download...")
+                    ModelManager.download_vosk_model(
+                        progress_callback=lambda p, s: self._notify_status(f"📥 {s}"),
+                        on_complete=self._on_vosk_download_finished,
+                    )
             else:
                 print("[VoiceListener] Modello Vosk non presente. Download automatico in corso...")
                 ModelManager.download_vosk_model(
@@ -187,14 +196,14 @@ class ContinuousVoiceListener:
                     from faster_whisper import WhisperModel
                     whisper_dir = MODELS_DIR / "whisper"
                     whisper_dir.mkdir(parents=True, exist_ok=True)
-                    self._notify_status("Caricamento Faster-Whisper (CPU int8)...")
+                    self._notify_status(f"Caricamento Faster-Whisper ({self.whisper_model}, CPU int8)...")
                     self._whisper_model = WhisperModel(
-                        WHISPER_MODEL_SIZE,
+                        self.whisper_model,
                         device="cpu",
                         compute_type="int8",
                         download_root=str(whisper_dir),
                     )
-                    print("[VoiceListener] Faster-Whisper inizializzato.")
+                    print(f"[VoiceListener] Faster-Whisper ({self.whisper_model}) inizializzato.")
                 except Exception as e:
                     print(f"[VoiceListener] Faster-Whisper non disponibile (uso fallback Vosk): {e}")
 

@@ -24,6 +24,11 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/)
 - **Integrazione Spotify e Flusso OAuth**: dismesso interamente il client Spotify, la relativa scheda di configurazione delle credenziali sviluppatore (Client ID e Secret) e l'infrastruttura OAuth locale, in favore dell'accesso nativo e gratuito a YouTube Music.
 
 ### 🐛 Risolto
+- **Avanzamento Automatico Traccia a Fine Brano**: monitoraggio periodico dello stato di playback del motore audio (`finished`) ed esecuzione automatica in background del brano successivo dell'atmosfera attiva con crossfade morbido.
+- **Rotazione Tracce Intelligente & Prevenzione Loop su Skip**: introdotta una cronologia circolare delle tracce recenti ed esclusione del brano appena ascoltato su pressione di "Salta Traccia" (⏭️) o su query di ricerca.
+- **Supporto Prioritario a `custom_playlist` nel Mood**: ripristinata la lettura della playlist YouTube/Spotify configurata per la singola atmosfera prima di ricorrere a seed o query generiche.
+- **Collegamento Regia AI Asincrona nella GUI**: ripristinata l'invocazione in background della pipeline semantica (Gemini, OpenAI, Ollama) durante la trascrizione vocale quando abilitata nelle impostazioni.
+- **Resilienza Modelli Vocali Vosk & Faster-Whisper**: introdotto l'autoricovero con re-download automatico in caso di cartella Vosk incompleta o corrotta, e allineamento del parametro `whisper_model` al costruttore del listener.
 - **Prevenzione Sovrascrittura Chiavi in ConfigManager**: corretto il comportamento di save_config evitando che salvasse stringhe vuote in SecretVault qualora le chiavi API nel dizionario non fossero valorizzate.
 - **Teardown Sicuro dei Thread Audio**: prevenuta l'emissione di segnali Qt verso oggetti C++ eliminati (RuntimeError: Signal source has been deleted) in caso di chiusura improvvisa dell'applicazione durante il fetch audio.
 

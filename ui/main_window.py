@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import sys
 import threading
+from collections import deque
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -86,6 +87,8 @@ class MainWindow(QMainWindow):
         self.auto_float_enabled = bool(self.config.get("ui", {}).get("auto_float", True))
         self.is_floating = False
         self._normal_geometry = None
+        self._recent_track_ids: deque[str] = deque(maxlen=25)
+        self._auto_advancing: bool = False
 
         # 2. Inizializza Motori Core
         self._init_core_engines()
@@ -100,6 +103,9 @@ class MainWindow(QMainWindow):
         self.cooldown_timer = QTimer(self)
         self.cooldown_timer.timeout.connect(self._update_cooldown_badge)
         self.cooldown_timer.start(100)
+        self.track_monitor_timer = QTimer(self)
+        self.track_monitor_timer.timeout.connect(self._check_track_finished)
+        self.track_monitor_timer.start(1000)
 
         # 6. Scorciatoie da tastiera (Hotkeys)
         self._setup_shortcuts()
@@ -150,6 +156,8 @@ class MainWindow(QMainWindow):
             on_partial_transcript=self._on_voice_partial_transcript,
             on_status=lambda s: self.bridge.sig_status.emit(s),
             on_level=lambda lvl: self.bridge.sig_level.emit(lvl),
+            use_whisper=bool(self.config.get("stt", {}).get("whisper_enabled", True)),
+            whisper_model=str(self.config.get("stt", {}).get("whisper_model", "small")),
             gate_threshold=int(self.config.get("stt", {}).get("gate_threshold", 20)),
         )
 
@@ -330,9 +338,49 @@ class MainWindow(QMainWindow):
         # Esegue l'analisi della scena
         profile = self.config["profiles"].get(self.active_profile_id, {})
         moods = profile.get("moods", {})
-        res = self.analyzer.analyze_keywords(text, profile)
-        if res.get("mood_id"):
-            self.director.submit(res, moods)
+        analyzer_cfg = self.config.get("analyzer", {})
+        provider = analyzer_cfg.get("ai_provider", "keywords")
+        mode = analyzer_cfg.get("mode", "hybrid")
+
+        if provider == "keywords" or mode == "keywords":
+            res = self.analyzer.analyze_keywords(text, profile)
+            if res.get("mood_id"):
+                self.director.submit(res, moods)
+            return
+
+        threshold = float(analyzer_cfg.get("confidence_threshold", 2.2))
+        kw_res = self.analyzer.analyze_keywords(text, profile, threshold=threshold)
+        if kw_res.get("voice_action") or kw_res.get("matched_by") == "command":
+            if kw_res.get("mood_id"):
+                self.director.submit(kw_res, moods)
+            return
+
+        if mode == "hybrid" and kw_res.get("mood_id") and float(kw_res.get("confidence", 0)) >= threshold:
+            self.director.submit(kw_res, moods)
+            return
+
+        curr_gen = self.director.generation
+        curr_mood = self.director.current_mood_id
+
+        def _ai_worker() -> None:
+            import asyncio
+            try:
+                ai_res = asyncio.run(
+                    self.analyzer.analyze(text, profile, analyzer_cfg, current_mood_id=curr_mood)
+                )
+                if self.director.is_current(curr_gen) and ai_res and ai_res.get("mood_id"):
+                    self.director.submit(ai_res, moods)
+                elif kw_res.get("mood_id") and self.director.is_current(curr_gen):
+                    self.director.submit(kw_res, moods)
+            except Exception as e_ai:
+                print(f"[AIWorker] Errore analisi AI: {e_ai}")
+                if kw_res.get("mood_id") and self.director.is_current(curr_gen):
+                    self.director.submit(kw_res, moods)
+
+        threading.Thread(target=_ai_worker, daemon=True, name=f"ai-analyze-{curr_gen}").start()
+        return
+
+
 
     def _on_sfx_triggered(self, sfx_item: Dict[str, Any], reason: str) -> None:
         self.bridge.sig_status.emit(f"💥 SFX: {sfx_item.get('name')} ({reason})")
@@ -363,19 +411,48 @@ class MainWindow(QMainWindow):
 
         try:
             track = None
-            # 1. Prova seed tracks
+            # 1. Prova playlist personalizzata del mood (se configurata)
+            custom_pl = str(mood_data.get("custom_playlist") or "").strip()
+            if custom_pl:
+                try:
+                    pl_info = self.music_service.load_playlist(custom_pl, limit=40)
+                    pl_tracks = pl_info.get("tracks") or []
+                    if pl_tracks:
+                        unheard = [
+                            t for t in pl_tracks
+                            if (t.get("videoId") or t.get("title")) not in self._recent_track_ids
+                        ]
+                        cand_pool = unheard if unheard else pl_tracks
+                        import random
+                        track = random.choice(cand_pool)
+                except Exception as e_pl:
+                    print(f"[MusicWorker] Errore caricamento custom_playlist mood '{mood_id}': {e_pl}")
+
+            # 2. Prova seed tracks
             seed_tracks = mood_data.get("seed_tracks", [])
             if seed_tracks:
                 import random
-                track = random.choice(seed_tracks)
+                unheard = [
+                    t for t in seed_tracks
+                    if (t.get("videoId") or t.get("title")) not in self._recent_track_ids
+                ]
+                cand_pool = unheard if unheard else seed_tracks
+                import random
+                track = random.choice(cand_pool)
 
             if not track:
-                # 2. Cerca tramite query
+                # 3. Cerca tramite query
                 queries = mood_data.get("queries", [f"{mood_id} soundtrack instrumental"])
                 query = custom_query or queries[0]
-                tracks = self.music_service.search_tracks(query, limit=5, tone_profile=tone)
+                tracks = self.music_service.search_tracks(query, limit=10, tone_profile=tone)
                 if tracks:
-                    track = tracks[0]
+                    unheard = [
+                        t for t in tracks
+                        if (t.get("videoId") or t.get("title")) not in self._recent_track_ids
+                    ]
+                    cand_pool = unheard if unheard else tracks
+                    import random
+                    track = random.choice(cand_pool)
 
             if not self.director.is_current(generation):
                 return
@@ -424,6 +501,9 @@ class MainWindow(QMainWindow):
             )
             crossfade = float(self.config.get("audio", {}).get("crossfade_seconds", 4.0))
             self.audio_engine.play(source, crossfade_seconds=crossfade)
+            track_key = (track.get("videoId") if track else "") or title or audio_uri
+            if track_key:
+                self._recent_track_ids.append(track_key)
             try:
                 self.bridge.sig_track_started.emit(title, artist)
                 self.bridge.sig_status.emit(f"▶️ In riproduzione: {title}")
@@ -525,6 +605,29 @@ class MainWindow(QMainWindow):
     def _update_cooldown_badge(self) -> None:
         rem = self.director.cooldown_remaining()
         self.transport.update_cooldown(rem)
+
+    def _check_track_finished(self) -> None:
+        """Controlla se il brano attivo è giunto a termine ed avanza automaticamente alla traccia successiva."""
+        if getattr(self, "_is_closing", False) or self.audio_engine.paused:
+            return
+        status = self.audio_engine.active_status()
+        if status.get("has_source") and status.get("finished"):
+            current_mood = self.director.current_mood_id
+            if current_mood and not getattr(self, "_auto_advancing", False):
+                self._auto_advancing = True
+                self.bridge.sig_status.emit(f"🔄 Brano terminato. Caricamento traccia successiva ({current_mood})...")
+
+                def _advance() -> None:
+                    try:
+                        self._fetch_and_play_track_worker(current_mood, self.director.generation)
+                    finally:
+                        self._auto_advancing = False
+
+                threading.Thread(
+                    target=_advance,
+                    daemon=True,
+                    name=f"auto-advance-{self.director.generation}",
+                ).start()
 
     # ================================================================ Profile & Settings
     def _reload_profile_combo(self, select_id: Optional[str] = None) -> None:

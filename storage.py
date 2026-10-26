@@ -197,7 +197,7 @@ class STTSettingsModel(BaseModel):
 
 
 class MoodModel(BaseModel):
-    id: str
+    id: str = ""
     name: str
     icon: str = "🎵"
     color: str = "#10b981"
@@ -527,6 +527,8 @@ def load_config() -> Dict[str, Any]:
                 for mid, u_m in u_moods.items():
                     if mid in deleted_moods.get(pid, []) or not isinstance(u_m, dict):
                         continue
+                    u_m = dict(u_m)
+                    u_m.setdefault("id", mid)
                     if mid not in def_moods:
                         def_moods[mid] = MoodModel(**u_m).model_dump()
                     else:

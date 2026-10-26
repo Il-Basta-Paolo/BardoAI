@@ -78,7 +78,7 @@ def test_save_auth_cookie_string_success_and_error(tmp_path, monkeypatch):
     # Cookie non valido (manca SAPISID)
     try:
         MusicService._save_auth_cookie_string("SID=only_sid")
-        assert False, "Doveva sollevare ValueError per cookie privo di SAPISID"
+        raise AssertionError("Doveva sollevare ValueError per cookie privo di SAPISID")
     except ValueError:
         pass
 

@@ -48,6 +48,7 @@ def mock_voice_listener(monkeypatch):
     """
     from voice_listener import ContinuousVoiceListener, ModelManager
 
+    ContinuousVoiceListener._original_init_models_async = ContinuousVoiceListener._init_models_async
     monkeypatch.setattr(ContinuousVoiceListener, "_init_models_async", lambda self: None)
     monkeypatch.setattr(ContinuousVoiceListener, "start", lambda self: None)
     monkeypatch.setattr(ContinuousVoiceListener, "stop", lambda self: None)
@@ -65,6 +66,7 @@ def mock_network_music_fetch(monkeypatch):
     from ui.main_window import MainWindow
     from music_service import MusicService
 
+    MainWindow._original_fetch_and_play_track_worker = MainWindow._fetch_and_play_track_worker
     monkeypatch.setattr(MainWindow, "_fetch_and_play_track_worker", lambda self, mood_id, gen, q="": None)
     monkeypatch.setattr(MusicService, "_client", lambda self: self.ytm if self.ytm is not None else MagicMock())
     yield

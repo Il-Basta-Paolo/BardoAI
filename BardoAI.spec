@@ -6,7 +6,7 @@ binaries = []
 hiddenimports = [
     'PySide6', 'PySide6.QtCore', 'PySide6.QtGui', 'PySide6.QtWidgets',
     'av', 'sounddevice', 'numpy', 'keyring', 'pydantic',
-    'vosk', 'faster_whisper', 'onnxruntime', 'httpx',
+    'vosk', 'faster_whisper', 'onnxruntime', 'httpx', 'websocket',
     'ui', 'ui.main_window', 'ui.styles',
     'ui.widgets.mood_grid', 'ui.widgets.soundboard',
     'ui.widgets.transport', 'ui.widgets.voice_monitor',

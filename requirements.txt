@@ -8,6 +8,7 @@ pydantic>=2.14.1
 keyring>=25.7.0
 httpx>=0.25.0
 ytmusicapi>=1.7.0
+websocket-client>=1.8.0
 yt-dlp>=2024.1.0
 vosk>=0.3.45
 faster-whisper>=1.0.0
