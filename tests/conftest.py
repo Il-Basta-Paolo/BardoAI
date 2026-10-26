@@ -36,3 +36,19 @@ def mock_ytdlp_bootstrap(monkeypatch):
     monkeypatch.setattr(YtDlpManager, "ensure_ready_async", _dummy_ensure_ready_async)
     monkeypatch.setattr(YtDlpManager, "_bootstrap", lambda self, auto_update=True: self._ready.set())
     yield
+
+
+@pytest.fixture(autouse=True)
+def mock_voice_listener(monkeypatch):
+    """
+    Impedisce categoricamente a ContinuousVoiceListener di scaricare modelli vocali (Vosk/Whisper),
+    aprire stream microfonici reali o avviare thread di cattura durante l'intera suite di test.
+    Garantisce stabilità ed elimina i crash da thread I/O orfani in CI su Windows.
+    """
+    from voice_listener import ContinuousVoiceListener, ModelManager
+
+    monkeypatch.setattr(ContinuousVoiceListener, "_init_models_async", lambda self: None)
+    monkeypatch.setattr(ContinuousVoiceListener, "start", lambda self: None)
+    monkeypatch.setattr(ContinuousVoiceListener, "stop", lambda self: None)
+    monkeypatch.setattr(ModelManager, "download_vosk_model", classmethod(lambda cls, progress_callback=None, on_complete=None: None))
+    yield
