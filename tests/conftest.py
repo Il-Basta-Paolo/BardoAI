@@ -3,6 +3,7 @@ Configurazione e fixture globali per la suite di test pytest di Bardo AI.
 Autore: Paolo Basta (https://github.com/Il-Basta-Paolo/BardoAI)
 """
 
+from unittest.mock import MagicMock
 import pytest
 from storage import SecretVault
 
@@ -51,4 +52,19 @@ def mock_voice_listener(monkeypatch):
     monkeypatch.setattr(ContinuousVoiceListener, "start", lambda self: None)
     monkeypatch.setattr(ContinuousVoiceListener, "stop", lambda self: None)
     monkeypatch.setattr(ModelManager, "download_vosk_model", classmethod(lambda cls, progress_callback=None, on_complete=None: None))
+    yield
+
+
+@pytest.fixture(autouse=True)
+def mock_network_music_fetch(monkeypatch):
+    """
+    Impedisce a MainWindow di avviare thread di download musicale in background
+    e a MusicService di effettuare chiamate di rete reali verso YouTube Music
+    durante l'esecuzione dei test unitari.
+    """
+    from ui.main_window import MainWindow
+    from music_service import MusicService
+
+    monkeypatch.setattr(MainWindow, "_fetch_and_play_track_worker", lambda self, mood_id, gen, q="": None)
+    monkeypatch.setattr(MusicService, "_client", lambda self: self.ytm if self.ytm is not None else MagicMock())
     yield
