@@ -98,21 +98,37 @@ Gestire l'audio durante una sessione di gioco di ruolo dal vivo o su Discord ric
 
 ```mermaid
 flowchart TD
-    Mic["Microfono"] --> VAD["VAD Adattivo (voice_listener.py)"]
-    VAD --> Vosk["STT Streaming Vosk (~150ms)"]
-    VAD --> Whisper["STT Frase Faster-Whisper"]
-    
-    Vosk -->|Trigger Rapidi SFX| SFX["SFXManager (sfx_manager.py)"]
-    Whisper -->|Frase Completa| AN["SceneAnalyzer (analyzer.py)\nNegazioni + Disambiguazione"]
-    
-    AN --> Director["Director (director.py)\nStato, Isteresi e Token Monotoni"]
-    Director --> MusicSvc["MusicService (music_service.py)\nCache locale + Risoluzione streaming"]
-    
-    MusicSvc --> AudioEngine["AudioEngine (audio_engine.py)\nMixer Unico sounddevice: Deck A/B + SFX + Ducking"]
-    SFX --> AudioEngine
-    
-    UI["PySide6 Desktop App (ui/main_window.py)"] <-->|Segnali Qt Thread-Safe| Director
-    UI <--> AudioEngine
+    subgraph INGRESSO["1. Acquisizione Vocale & Input"]
+        Mic["Microfono"] --> VAD["VAD Adattivo & Noise Gate\n(voice_listener.py)"]
+        VAD --> Vosk["STT Streaming Vosk (~150ms)\nTrascrizione parziale"]
+        VAD --> Whisper["STT Faster-Whisper (tiny)\nTrascrizione frase completa"]
+        UI_Click["Interfaccia Utente (PySide6)\nClick Soundboard / Mood"]
+    end
+
+    subgraph ANALISI["2. Regia & Analisi Semantica"]
+        Vosk -->|Trigger Rapido SFX| SFX["SFXManager (sfx_manager.py)\nNegazioni + Regex confini esatti"]
+        Whisper -->|Frase Completa| SFX
+        Whisper -->|Frase Completa| AN["SceneAnalyzer (analyzer.py)\nRegole Morfologiche + Veto Pericolo"]
+        
+        AN -->|Match Regole / Comandi| Director["Director (director.py)\nIsteresi, Cooldown & Token Generazionali"]
+        AN -.->|Modalità Ibrida (async)| AI["LLM Provider Remoto/Locale\nGemini / OpenAI / Ollama"]
+        AI -->|Decisione Semantica| Director
+        UI_Click -->|Override Manuale Immediato| Director
+        UI_Click -->|Riproduzione Manuale| SFX
+    end
+
+    subgraph MUSICA["3. Selezione Musicale & Risoluzione"]
+        Director -->|SceneDecision| Worker["Music Fetch Worker (ui/main_window.py)\nRotazione tracce & Prevenzione loop"]
+        Worker --> MusicSvc["MusicService (music_service.py)\nPlaylist Mood / Seed / Query / Fallback locale"]
+        MusicSvc --> YTDLP["YtDlpManager (yt-dlp)\nStream extractor resiliente"]
+    end
+
+    subgraph OUTPUT["4. Riproduzione & Audio Engine"]
+        MusicSvc -->|MusicSource| AudioEngine["AudioEngine (audio_engine.py)\nMixer Unico 48kHz float32 (sounddevice + PyAV)"]
+        SFX -->|Array PCM + Ducking| AudioEngine
+        AudioEngine -->|Deck A / Deck B\nCrossfade S-Curve| Speakers["Casse / Cuffie / Cavo Virtuale"]
+        AudioEngine -.->|Monitor Fine Brano\nAuto-Advance| Worker
+    end
 ```
 
 ### Moduli Principali

@@ -129,7 +129,7 @@ class ContinuousVoiceListener:
         on_status: Optional[Callable[[str], None]] = None,
         on_level: Optional[Callable[[float], None]] = None,
         use_whisper: bool = True,
-        whisper_model: str = "small",
+        whisper_model: str = "tiny",
         gate_threshold: int = 20,
     ) -> None:
         self.on_transcript = on_transcript
@@ -175,6 +175,14 @@ class ContinuousVoiceListener:
                     vpath = str(ModelManager.get_vosk_model_dir())
                     self._vosk_model = vosk.Model(vpath)
                     print("[VoiceListener] Modello Vosk italiano caricato con successo.")
+                    with self._lock:
+                        if self.is_listening and self._vosk_recognizer is None:
+                            try:
+                                self._vosk_recognizer = vosk.KaldiRecognizer(self._vosk_model, self.SAMPLE_RATE)
+                                self._vosk_recognizer.SetWords(False)
+                                print("[VoiceListener] Recognizer Vosk avviato a caldo.")
+                            except Exception as e_rec:
+                                print(f"[VoiceListener] Errore avvio recognizer a caldo: {e_rec}")
                 except Exception as e:
                     print(f"[VoiceListener] Impossibile caricare Vosk (modello corrotto o incompleto): {e}")
                     shutil.rmtree(ModelManager.get_vosk_model_dir(), ignore_errors=True)
@@ -219,6 +227,13 @@ class ContinuousVoiceListener:
                 vosk.SetLogLevel(-1)
                 vpath = str(ModelManager.get_vosk_model_dir())
                 self._vosk_model = vosk.Model(vpath)
+                with self._lock:
+                    if self.is_listening and self._vosk_recognizer is None:
+                        try:
+                            self._vosk_recognizer = vosk.KaldiRecognizer(self._vosk_model, self.SAMPLE_RATE)
+                            self._vosk_recognizer.SetWords(False)
+                        except Exception:
+                            pass
                 self._notify_status("🎙️ Modello vocale pronto! In ascolto...")
             except Exception as e:
                 self._notify_status(f"⚠️ Errore inizializzazione Vosk: {e}")

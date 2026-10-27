@@ -33,7 +33,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "engine": "local",  # "local" (Silero VAD + Vosk + faster-whisper)
         "vosk_enabled": True,
         "whisper_enabled": True,
-        "whisper_model": "small",  # "tiny", "base", "small"
+        "whisper_model": "tiny",  # "tiny", "base", "small"
         "vad_threshold": 0.45,
         "gate_threshold": 20,
     },

@@ -89,6 +89,7 @@ class MainWindow(QMainWindow):
         self._normal_geometry = None
         self._recent_track_ids: deque[str] = deque(maxlen=25)
         self._auto_advancing: bool = False
+        self._last_finished_token: Optional[int] = None
 
         # 2. Inizializza Motori Core
         self._init_core_engines()
@@ -157,7 +158,7 @@ class MainWindow(QMainWindow):
             on_status=lambda s: self.bridge.sig_status.emit(s),
             on_level=lambda lvl: self.bridge.sig_level.emit(lvl),
             use_whisper=bool(self.config.get("stt", {}).get("whisper_enabled", True)),
-            whisper_model=str(self.config.get("stt", {}).get("whisper_model", "small")),
+            whisper_model=str(self.config.get("stt", {}).get("whisper_model", "tiny")),
             gate_threshold=int(self.config.get("stt", {}).get("gate_threshold", 20)),
         )
 
@@ -335,6 +336,8 @@ class MainWindow(QMainWindow):
     def _on_voice_final_transcript(self, text: str) -> None:
         """Trascrizione completa frase (Whisper/Vosk): analisi per cambio atmosfera e bioma."""
         self.bridge.sig_transcript.emit(text, False)
+        # Controlla SFX anche su fine frase per catturare effetti non rilevati nello streaming parziale
+        self.sfx_manager.detect_and_play_from_speech(text)
         # Esegue l'analisi della scena
         profile = self.config["profiles"].get(self.active_profile_id, {})
         moods = profile.get("moods", {})
@@ -462,8 +465,28 @@ class MainWindow(QMainWindow):
                 try:
                     resolved = self.music_service.resolve_playable(track, tone_profile=tone)
                 except Exception as e_res:
-                    print(f"[MusicWorker] Risoluzione traccia online fallita ({e_res}), provo fallback locale...")
+                    print(f"[MusicWorker] Risoluzione traccia online fallita ({e_res}), provo fallback...")
                     resolved = None
+
+            # Fallback su ricerca online tramite query se la traccia da seed o custom playlist fallisce
+            if not resolved or not (resolved.get("uri") or resolved.get("audio_url")):
+                queries = mood_data.get("queries", [f"{mood_id} soundtrack instrumental"])
+                query = custom_query or queries[0]
+                try:
+                    alt_tracks = self.music_service.search_tracks(query, limit=10, tone_profile=tone)
+                    for alt in alt_tracks:
+                        alt_key = alt.get("videoId") or alt.get("title")
+                        if alt_key and alt_key in self._recent_track_ids:
+                            continue
+                        try:
+                            resolved = self.music_service.resolve_playable(alt, tone_profile=tone)
+                            if resolved and (resolved.get("uri") or resolved.get("audio_url")):
+                                track = alt
+                                break
+                        except Exception:
+                            continue
+                except Exception as e_alt:
+                    print(f"[MusicWorker] Errore fallback ricerca: {e_alt}")
 
             # Fallback su tracce locali se lo stream online non è risolvibile
             if not resolved or not (resolved.get("uri") or resolved.get("audio_url")):
@@ -611,9 +634,13 @@ class MainWindow(QMainWindow):
         if getattr(self, "_is_closing", False) or self.audio_engine.paused:
             return
         status = self.audio_engine.active_status()
-        if status.get("has_source") and status.get("finished"):
+        if status.get("has_source") and status.get("finished") and not status.get("error"):
+            token = status.get("token")
+            if token is not None and token == getattr(self, "_last_finished_token", None):
+                return
             current_mood = self.director.current_mood_id
             if current_mood and not getattr(self, "_auto_advancing", False):
+                self._last_finished_token = token
                 self._auto_advancing = True
                 self.bridge.sig_status.emit(f"🔄 Brano terminato. Caricamento traccia successiva ({current_mood})...")
 
@@ -722,6 +749,9 @@ class MainWindow(QMainWindow):
         if moods:
             first_mood = next(iter(moods.keys()))
             self.director.manual_select(first_mood)
+            # All'avvio resetta il cooldown per consentire all'ascolto vocale di reagire subito al parlato
+            self.director._cooldown_until = 0.0
+            self.director._scene_started_at = 0.0
 
     def _open_settings(self) -> None:
         dlg = SettingsDialog(self.config, self, music_service=self.music_service)

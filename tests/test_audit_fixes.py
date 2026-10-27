@@ -155,15 +155,22 @@ def test_auto_advance_on_finished_track(qapp):
 
         # Deck ha terminato (EOF)
         win.audio_engine.active_status = MagicMock(return_value={
+            "token": 1,
             "has_source": True,
             "finished": True,
             "paused": False,
+            "error": None,
         })
         win._check_track_finished()
         time.sleep(0.1)
 
         assert len(worker_called) == 1
         assert worker_called[0] == ("combattimento", 5)
+
+        # Chiamata successiva con lo stesso token non deve lanciare un secondo worker (prevenzione loop)
+        win._check_track_finished()
+        time.sleep(0.05)
+        assert len(worker_called) == 1
 
     finally:
         win.close()
@@ -195,5 +202,53 @@ def test_ai_worker_invoked_on_speech(qapp):
         assert len(ai_called) == 1
         assert "Guardate" in ai_called[0]
 
+    finally:
+        win.close()
+
+
+def test_final_transcript_triggers_sfx(qapp):
+    """Verifica che _on_voice_final_transcript controlli gli effetti sonori con detect_and_play_from_speech."""
+    win = MainWindow()
+    try:
+        win.sfx_manager.detect_and_play_from_speech = MagicMock()
+        win._on_voice_final_transcript("colpisce il bersaglio con la spada")
+        assert win.sfx_manager.detect_and_play_from_speech.called
+        win.sfx_manager.detect_and_play_from_speech.assert_called_with("colpisce il bersaglio con la spada")
+    finally:
+        win.close()
+
+
+def test_fetch_worker_fallback_to_search_when_seed_fails(qapp):
+    """Verifica che _fetch_and_play_track_worker ripieghi su search_tracks se il seed online fallisce."""
+    win = MainWindow()
+    try:
+        win.director.generation = 1
+        win.config["profiles"][win.active_profile_id]["moods"]["test_fail"] = {
+            "name": "Test Fail",
+            "seed_tracks": [{"videoId": "broken_vid", "title": "Broken Seed"}],
+            "queries": ["epic orchestral test query"],
+            "tone_profile": "soundtrack",
+        }
+
+        # Seed resolution fallisce
+        def fake_resolve(track, tone_profile=""):
+            if track.get("videoId") == "broken_vid":
+                raise RuntimeError("Video unavailable")
+            return {
+                "uri": "https://example.com/fallback.opus",
+                "title": track.get("title", "Fallback Track"),
+                "duration": 150.0,
+            }
+
+        win.music_service.resolve_playable = fake_resolve
+        win.music_service.search_tracks = MagicMock(return_value=[
+            {"videoId": "working_vid", "title": "Working Online Search"}
+        ])
+        win.audio_engine.play = MagicMock()
+
+        win._original_fetch_and_play_track_worker("test_fail", 1)
+
+        assert win.music_service.search_tracks.called
+        assert win.audio_engine.play.called
     finally:
         win.close()

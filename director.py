@@ -160,7 +160,7 @@ class Director:
             strong_env_switch = bool(env_id) and env_id != self.current_env_id and float(result.get("confidence", 0)) >= 9.0
             # Uscire da una scena urgente verso la calma richiede più conferme
             required = self.calm_required_weight * (1.5 if current_urgent else 1.0)
-            if result.get("force_change") and not current_urgent:
+            if (result.get("force_change") or float(result.get("confidence", 0) or 0) >= 5.0) and not current_urgent:
                 required = min(required, 1.0)
 
             if not strong_env_switch and weight < required:
