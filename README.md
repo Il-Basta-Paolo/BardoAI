@@ -110,8 +110,8 @@ flowchart TD
         Whisper -->|Frase Completa| SFX
         Whisper -->|Frase Completa| AN["SceneAnalyzer (analyzer.py)\nRegole Morfologiche + Veto Pericolo"]
         
-        AN -->|Match Regole / Comandi| Director["Director (director.py)\nIsteresi, Cooldown & Token Generazionali"]
-        AN -.->|Modalità Ibrida (async)| AI["LLM Provider Remoto/Locale\nGemini / OpenAI / Ollama"]
+        AN -->|Match Regole e Comandi| Director["Director (director.py)\nIsteresi, Cooldown & Token Generazionali"]
+        AN -.->|Modalità Ibrida asincrona| AI["LLM Provider Remoto o Locale\nGemini / OpenAI / Ollama"]
         AI -->|Decisione Semantica| Director
         UI_Click -->|Override Manuale Immediato| Director
         UI_Click -->|Riproduzione Manuale| SFX
@@ -125,9 +125,9 @@ flowchart TD
 
     subgraph OUTPUT["4. Riproduzione & Audio Engine"]
         MusicSvc -->|MusicSource| AudioEngine["AudioEngine (audio_engine.py)\nMixer Unico 48kHz float32 (sounddevice + PyAV)"]
-        SFX -->|Array PCM + Ducking| AudioEngine
-        AudioEngine -->|Deck A / Deck B\nCrossfade S-Curve| Speakers["Casse / Cuffie / Cavo Virtuale"]
-        AudioEngine -.->|Monitor Fine Brano\nAuto-Advance| Worker
+        SFX -->|Array PCM e Ducking| AudioEngine
+        AudioEngine -->|Crossfade S-Curve Deck A-B| Speakers["Casse / Cuffie / Cavo Virtuale"]
+        AudioEngine -.->|Auto-Advance fine brano| Worker
     end
 ```
 
